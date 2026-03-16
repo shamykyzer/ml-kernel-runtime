@@ -13,6 +13,35 @@ Build a clean, testable runtime scaffold that evolves from:
 3. task partitioning and scheduler dispatch
 4. reproducible benchmarking and performance analysis
 
+## Architecture
+
+```mermaid
+graph TD
+    subgraph "Benchmark Layer"
+        BENCH[benchmark_gemm]
+    end
+    subgraph "Kernel Layer"
+        NAIVE[gemm_naive]
+        TILED[gemm_tiled]
+        PARALLEL[gemm_parallel]
+        SFMAX[softmax kernels]
+    end
+    subgraph "Data Layer"
+        TENSOR[Tensor]
+        TIMER[Timer]
+    end
+
+    BENCH --> NAIVE
+    BENCH --> TILED
+    BENCH --> PARALLEL
+    BENCH --> SFMAX
+    BENCH --> TIMER
+    NAIVE --> TENSOR
+    TILED --> TENSOR
+    PARALLEL --> TENSOR
+    SFMAX --> TENSOR
+```
+
 ## How It Works
 
 ### The Tensor — Your Data Container
@@ -20,7 +49,7 @@ Build a clean, testable runtime scaffold that evolves from:
 Think of a `Tensor` like a spreadsheet grid. It has rows and columns, and each cell holds a number.
 
 ```
-Tensor A (3 rows × 4 cols):
+Tensor A (3 rows x 4 cols):
 
   | col0 | col1 | col2 | col3 |
 --+------+------+------+------+
@@ -36,32 +65,25 @@ Memory: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
          ---- row 0 ----  ---- row 1 ----  -------- row 2 --------
 ```
 
-To find element at row 2, col 1: `index = 2 × 4 + 1 = 9` → that's `10.0`. This is called **row-major** layout.
+To find element at row 2, col 1: `index = 2 * 4 + 1 = 9` -> that's `10.0`. This is called **row-major** layout.
 
 ### Matrix Multiplication (GEMM) — The Core Operation
 
-GEMM = **G**eneral **M**atrix **M**ultiply. It computes `C = A × B`.
+GEMM = **G**eneral **M**atrix **M**ultiply. It computes `C = A x B`.
 
 For each cell in the result, you take a row from A and a column from B, multiply them pair-by-pair, and add up:
 
 ```
-A (2×3)         B (3×2)         C (2×2)
+A (2x3)         B (3x2)         C (2x2)
 
-| 1  2  3 |     | 7   8 |      | ?  ? |
-| 4  5  6 |  ×  | 9  10 |  =   | ?  ? |
+| 1  2  3 |     | 7   8 |      |  58  64 |
+| 4  5  6 |  x  | 9  10 |  =   | 139 154 |
                 | 11  12 |
 ```
 
-To get C[0][0]: take row 0 of A and col 0 of B:
-
 ```
-(1×7) + (2×9) + (3×11) = 7 + 18 + 33 = 58
-```
-
-To get C[0][1]: row 0 of A, col 1 of B:
-
-```
-(1×8) + (2×10) + (3×12) = 8 + 20 + 36 = 64
+C[0][0] = (1x7) + (2x9) + (3x11) = 7 + 18 + 33 = 58
+C[0][1] = (1x8) + (2x10) + (3x12) = 8 + 20 + 36 = 64
 ```
 
 This is what `gemm_naive` does — one cell at a time, three nested loops.
@@ -72,21 +94,21 @@ This is what `gemm_naive` does — one cell at a time, three nested loops.
 
 Your CPU has a small, very fast memory called **cache** (like a desk), and a large, slow memory called **RAM** (like a filing cabinet).
 
-```
-CPU  ←→  Cache (fast, small ~MB)  ←→  RAM (slow, large ~GB)
-```
+```mermaid
+graph LR
+    CPU["CPU"] <-->|"fast"| CACHE["Cache
+    ~MB"]
+    CACHE <-->|"slow"| RAM["RAM
+    ~GB"]
 
-Naive GEMM jumps around memory randomly. When computing one cell of C, it reads a row of A (nice, consecutive in memory) but then reads a **column** of B (jumping across rows — terrible for cache):
-
-```
-B in memory: [7, 8, 9, 10, 11, 12]
-
-Reading col 0 means: index 0, then index 2, then index 4
-  → jumping by 2 each time (the number of columns)
-  → cache keeps loading data you don't need yet
+    style CPU fill:#4CAF50,color:#fff
+    style CACHE fill:#FF9800,color:#fff
+    style RAM fill:#f44336,color:#fff
 ```
 
-For a 1024×1024 matrix, B has ~4MB of data. The CPU cache can only hold parts of it. Naive GEMM keeps loading and evicting the same data over and over — the CPU spends most of its time waiting for memory.
+Naive GEMM jumps around memory randomly. When computing one cell of C, it reads a row of A (consecutive — good) but then reads a **column** of B (jumping across rows — terrible for cache).
+
+For a 1024x1024 matrix, B has ~4MB of data. The CPU cache can only hold parts of it. Naive GEMM keeps loading and evicting the same data over and over — the CPU spends most of its time waiting for memory.
 
 ### Why Tiled Is Fast — Working In Blocks
 
@@ -98,58 +120,125 @@ Think of it like washing dishes.
 
 Tiled GEMM says: instead of computing one cell at a time across the whole matrix, **grab a small block of A and a small block of B that both fit in cache**, and do all the work on those blocks before moving on.
 
-```
-Instead of this (naive):          Do this (tiled, block_size=2):
+```mermaid
+graph LR
+    subgraph "Naive: one cell at a time"
+        N1["cell
+        0,0"] --> N2["cell
+        0,1"] --> N3["cell
+        0,2"] --> N4["...
+        slow"]
+    end
 
-Process every cell                Process block by block
-one at a time across              ┌─────┬─────┐
-the whole matrix                  │ do  │ do  │
-                                  │this │this │
-                                  │first│ 2nd │
-                                  ├─────┼─────┤
-                                  │ 3rd │ 4th │
-                                  └─────┴─────┘
+    style N1 fill:#f44336,color:#fff
+    style N2 fill:#f44336,color:#fff
+    style N3 fill:#f44336,color:#fff
+    style N4 fill:#f44336,color:#fff
 ```
 
-A 16×16 block of floats = 1KB. That fits easily in cache. So while you're working on that block, every memory access is **fast** — it's already on your "desk."
+```mermaid
+graph LR
+    subgraph "Tiled: block at a time"
+        T1["Block
+        0,0"] --> T2["Block
+        0,1"] --> T3["Block
+        1,0"] --> T4["Block
+        1,1"]
+    end
+
+    style T1 fill:#4CAF50,color:#fff
+    style T2 fill:#4CAF50,color:#fff
+    style T3 fill:#4CAF50,color:#fff
+    style T4 fill:#4CAF50,color:#fff
+```
+
+A 16x16 block of floats = 1KB. That fits easily in cache. So while you're working on that block, every memory access is **fast** — it's already on your "desk."
 
 Same math, same result, just a smarter order of operations.
 
 ### Why Block Size Matters
 
-- **Too small** (bs=1) → you're back to one-at-a-time, no benefit from blocking.
-- **Too big** (bs=1024) → the block doesn't fit in cache anymore, same problem as naive.
-- **Sweet spot** (bs=16 or 32) → blocks fit in L1/L2 cache perfectly.
+```mermaid
+graph LR
+    TOO_SMALL["bs=1
+    No benefit"] -.-> SWEET["bs=16-32
+    Fits in cache"] -.-> TOO_BIG["bs=1024
+    Cache overflow"]
+
+    style TOO_SMALL fill:#f44336,color:#fff
+    style SWEET fill:#4CAF50,color:#fff
+    style TOO_BIG fill:#f44336,color:#fff
+```
+
+- **Too small** (bs=1) — you're back to one-at-a-time, no benefit from blocking.
+- **Too big** (bs=1024) — the block doesn't fit in cache anymore, same problem as naive.
+- **Sweet spot** (bs=16 or 32) — blocks fit in L1/L2 cache perfectly.
 
 That's why the benchmark tests multiple block sizes — to find the sweet spot for your hardware.
 
 ### The Benchmark Harness
 
-The benchmark does this for each kernel:
+```mermaid
+flowchart TD
+    A["Create random A, B
+    (deterministic seed)"] --> B["Warmup
+    2 runs, discard results"]
+    B --> C["Timed trials
+    5 runs, measure each"]
+    C --> D["Compute average"]
+    D --> E["Report GFLOPS
+    2 x N^3 / seconds / 1e9"]
 
-1. Create random matrices A and B (same seed every time → reproducible)
-2. **Warmup** — run the kernel twice and throw away the results (so caches are "warm")
-3. **Time** — run it 5 times, measure each, take the average
-4. **Report** GFLOPS = how many billions of multiply-add operations per second
-
-GFLOPS formula: a matrix multiply of size N does `2 × N³` floating-point operations (one multiply + one add per step). So: `GFLOPS = 2 × N³ / seconds / 1,000,000,000`
+    style A fill:#2196F3,color:#fff
+    style B fill:#FF9800,color:#fff
+    style C fill:#4CAF50,color:#fff
+    style D fill:#4CAF50,color:#fff
+    style E fill:#9C27B0,color:#fff
+```
 
 Higher GFLOPS = faster kernel.
 
-### What's Next
+### Kernel Comparison
 
-Phase 6 adds **parallelism** — right now everything runs on one CPU core. With OpenMP, we split the tile grid across multiple cores:
+| Kernel | Strategy | Cache Behavior | Parallelism |
+|--------|----------|----------------|-------------|
+| `gemm_naive` | Triple loop, one cell at a time | Poor — random access on B | Single core |
+| `gemm_tiled` | Block loop, one tile at a time | Good — blocks fit in cache | Single core |
+| `gemm_parallel` | Block loop across cores | Good — each core owns tiles | Multi-core (OpenMP) |
 
+### What's Next — Softmax (Reduction Pattern)
+
+GEMM is **embarrassingly parallel** — each output cell is independent. Softmax is the opposite: it requires **cross-tile reduction**, which mirrors how Graphcore's IPU handles BSP communication.
+
+```mermaid
+flowchart LR
+    subgraph "GEMM: Independent tiles"
+        G1["Tile A"] ~~~ G2["Tile B"] ~~~ G3["Tile C"] ~~~ G4["Tile D"]
+    end
+
+    subgraph "Softmax: Tiles must communicate"
+        S1["Tile A"] --> R["Reduce
+        max + sum"]
+        S2["Tile B"] --> R
+        S3["Tile C"] --> R
+        R --> F["Finalize
+        normalize"]
+    end
+
+    style G1 fill:#4CAF50,color:#fff
+    style G2 fill:#4CAF50,color:#fff
+    style G3 fill:#4CAF50,color:#fff
+    style G4 fill:#4CAF50,color:#fff
+    style S1 fill:#FF9800,color:#fff
+    style S2 fill:#FF9800,color:#fff
+    style S3 fill:#FF9800,color:#fff
+    style R fill:#f44336,color:#fff
+    style F fill:#9C27B0,color:#fff
 ```
-Core 0: tiles [0,0] [0,1]     ← works on top half
-Core 1: tiles [1,0] [1,1]     ← works on bottom half
-```
-
-Each core owns different output tiles, so they never conflict. You should see another big speedup on top of tiling.
 
 ## Current Status
 
-Phases 1–5 are complete:
+Phases 1-5 are complete:
 
 - **Tensor class** — row-major `std::vector<float>` storage with bounds-checked `at()`, raw `data()` pointer, `fill`, `zero`, `randomize(seed)`
 - **Naive GEMM** — triple-loop `gemm_naive(A, B, C)` with dimension validation
@@ -158,7 +247,7 @@ Phases 1–5 are complete:
 - **Benchmark harness** — grouped output by matrix size, GFLOPS reporting, speedup vs baseline, best-kernel summary
 - **Test suite** — tensor tests (11 cases) and GEMM correctness tests (7 cases) using a minimal in-repo assertion framework
 
-Upcoming: parallel GEMM (OpenMP), scheduler abstraction, docs.
+Upcoming: parallel GEMM (OpenMP), softmax kernels, scheduler abstraction, docs.
 
 ## Repository Layout
 
