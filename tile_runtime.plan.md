@@ -20,6 +20,9 @@ todos:
   - id: runtime-layer
     content: Introduce TileTask generation and a minimal Scheduler that dispatches tile-local GEMM work.
     status: pending
+  - id: softmax-kernels
+    content: Implement naive, tiled, and parallel softmax kernels with reduction — a fundamentally different compute pattern from GEMM that demonstrates BSP-style cross-tile communication.
+    status: pending
   - id: docs-polish
     content: Write README and docs covering architecture, performance analysis, and Graphcore-inspired runtime design.
     status: pending
@@ -163,6 +166,62 @@ flowchart TD
 - Add [docs/poplibs_analysis.md](/home/shamy/ml-kernel-runtime/docs/poplibs_analysis.md) to explain the Graphcore-inspired ideas without overstating hardware fidelity.
 - Add [scripts/run_benchmarks.sh](/home/shamy/ml-kernel-runtime/scripts/run_benchmarks.sh) for a repeatable benchmark workflow.
 
+## Phase 11: Naive Softmax Kernel
+
+Softmax is a fundamentally different pattern from GEMM — it requires **reduction** across elements rather than independent output cells. This mirrors BSP-style cross-tile communication on Graphcore's IPU.
+
+- Add `include/softmax.h` and `src/softmax_naive.cpp`.
+- Implement row-wise softmax: for each row, compute `softmax(x_i) = exp(x_i - max) / sum(exp(x_j - max))`.
+- Use the **log-sum-exp trick** (subtract row max before exp) for numerical stability — without this, large values cause overflow.
+- The kernel surface:
+
+```cpp
+void softmax_naive(const Tensor& input, Tensor& output);
+```
+
+- Add `tests/test_softmax.cpp` covering:
+  - Hand-computed small examples
+  - Output rows sum to 1.0
+  - All values in [0, 1]
+  - Numerically stable with large input values
+  - Dimension validation
+
+## Phase 12: Tiled Softmax With Partial Reduction
+
+This is the phase that shows understanding of BSP — tiles must **exchange partial results** (max and sum) before finalizing.
+
+- Add `src/softmax_tiled.cpp`.
+- Split each row into blocks of `block_size` elements.
+- **Two-pass approach**:
+  1. Each block computes a **partial max** and **partial exp-sum** independently.
+  2. Reduce partial maxes to find the global row max, then adjust partial sums and normalize.
+- This directly models how an IPU would decompose softmax across tiles with local SRAM — each tile computes locally, then participates in an exchange/reduce phase.
+
+```cpp
+void softmax_tiled(const Tensor& input, Tensor& output, size_t block_size);
+```
+
+- Validate against `softmax_naive` for correctness.
+
+## Phase 13: Parallel Softmax (OpenMP)
+
+- Add `src/softmax_parallel.cpp`.
+- Parallelize across rows (each row is independent) with `#pragma omp parallel for`.
+- Within each row, use tiled reduction with thread-local partial max/sum to avoid race conditions.
+- Benchmark against naive and tiled variants across matrix sizes.
+
+```cpp
+void softmax_parallel(const Tensor& input, Tensor& output, size_t block_size);
+```
+
+## Phase 14: Softmax Benchmark Integration
+
+- Extend `benchmarks/benchmark_gemm.cpp` (or create `benchmarks/benchmark_softmax.cpp`) to:
+  - Benchmark naive vs tiled vs parallel softmax
+  - Report time, throughput (elements/sec), and speedup
+  - Sweep block sizes and thread counts
+- The key insight to surface: unlike GEMM where tiling is about cache reuse, softmax tiling is about **decomposing reductions** — a harder parallelism problem.
+
 ## Suggested Delivery Order
 
 1. Bootstrap repo + CMake.
@@ -172,7 +231,10 @@ flowchart TD
 5. Implement tiled GEMM + compare block sizes.
 6. Implement OpenMP parallel GEMM + thread scaling.
 7. Add `TileTask` + `Scheduler` abstraction.
-8. Finish docs and benchmark analysis.
+8. Implement naive softmax + correctness tests.
+9. Implement tiled softmax with partial reduction.
+10. Implement parallel softmax + benchmarks.
+11. Finish docs and benchmark analysis.
 
 ## Risks To Watch
 
