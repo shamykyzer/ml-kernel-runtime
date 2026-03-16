@@ -18,6 +18,9 @@ find_package(OpenMP QUIET)
 
 add_library(tile_runtime_core STATIC
   src/runtime_placeholder.cpp
+  src/tensor.cpp
+  src/gemm_naive.cpp
+  src/gemm_tiled.cpp
 )
 
 target_include_directories(tile_runtime_core
@@ -39,5 +42,17 @@ add_executable(test_runtime
 )
 target_link_libraries(test_runtime PRIVATE tile_runtime_core)
 
+add_executable(test_tensor
+  tests/test_tensor.cpp
+)
+target_link_libraries(test_tensor PRIVATE tile_runtime_core)
+
+add_executable(test_gemm
+  tests/test_gemm.cpp
+)
+target_link_libraries(test_gemm PRIVATE tile_runtime_core)
+
 enable_testing()
 add_test(NAME runtime_smoke_test COMMAND test_runtime)
+add_test(NAME tensor_tests COMMAND test_tensor)
+add_test(NAME gemm_tests COMMAND test_gemm)

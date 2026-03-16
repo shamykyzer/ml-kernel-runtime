@@ -4,19 +4,19 @@ overview: "Turn the current blank repo into a small, benchmarked C++17 tile-base
 todos:
   - id: bootstrap-layout
     content: Create the repo structure and CMake build with a core library, benchmark executable, and test executable.
-    status: pending
+    status: done
   - id: tensor-foundation
     content: Implement the Tensor type with row-major storage, utility methods, and tensor-focused tests.
-    status: pending
+    status: done
   - id: kernel-baseline
     content: Implement naive GEMM and use it as the correctness reference for all later kernels.
-    status: pending
+    status: done
   - id: benchmark-harness
     content: Add timer utilities and a benchmark runner that reports time, GFLOPS, block size, and thread count.
-    status: pending
+    status: done
   - id: kernel-optimizations
     content: Implement tiled GEMM and OpenMP parallel GEMM, then validate correctness and measure speedups.
-    status: pending
+    status: in-progress
   - id: runtime-layer
     content: Introduce TileTask generation and a minimal Scheduler that dispatches tile-local GEMM work.
     status: pending
