@@ -211,26 +211,67 @@ flowchart LR
     style E fill:#9C27B0,color:#fff
 ```
 
-Higher GFLOPS = faster kernel. Example output:
+Higher GFLOPS = faster kernel. The benchmark also sweeps thread counts (1, 2, 4, 8, ...) to show parallel scaling. Example output:
 
 ```
-=== N=512 ===
-  naive              975.62 ms    0.28 GFLOPS   (baseline)
-  tiled  bs=16        31.13 ms    8.62 GFLOPS   31.3x
-  tiled  bs=32        56.08 ms    4.79 GFLOPS   17.4x
-  tiled  bs=64       106.62 ms    2.52 GFLOPS    9.2x
-  best: tiled bs=16
+=== N=1024 ===
+  naive                      5454.15 ms      0.39 GFLOPS   (baseline)
+  tiled  bs=16                646.11 ms      3.32 GFLOPS     8.4x
+  tiled  bs=32               1628.45 ms      1.32 GFLOPS     3.3x
+  tiled  bs=64               1592.13 ms      1.35 GFLOPS     3.4x
+  parallel  bs=16             679.32 ms      3.16 GFLOPS     8.0x
+  parallel  bs=16  t=2        351.27 ms      6.11 GFLOPS    15.5x
+  parallel  bs=16  t=4        238.11 ms      9.02 GFLOPS    22.9x
+  parallel  bs=16  t=8        169.80 ms     12.65 GFLOPS    32.1x
+  parallel  bs=16  t=16       128.50 ms     16.71 GFLOPS    42.4x
+  parallel  bs=16  t=20       119.22 ms     18.01 GFLOPS    45.8x
+  best: parallel bs=16 t=20
 ```
 
-### 7. Kernel Comparison
+### 7. Parallel GEMM — Multi-Core Scaling
 
-| Kernel | Strategy | Cache | Cores | Relative Speed |
-|--------|----------|-------|-------|----------------|
+The parallel kernel splits output tiles across CPU cores using OpenMP. Each core owns distinct tiles, so no synchronization is needed:
+
+```mermaid
+graph TD
+    subgraph "Thread 0"
+        direction LR
+        T0A["Tile 0,0"] ~~~ T0B["Tile 0,1"]
+    end
+    subgraph "Thread 1"
+        direction LR
+        T1A["Tile 1,0"] ~~~ T1B["Tile 1,1"]
+    end
+    subgraph "Thread 2"
+        direction LR
+        T2A["Tile 2,0"] ~~~ T2B["Tile 2,1"]
+    end
+    subgraph "Thread 3"
+        direction LR
+        T3A["Tile 3,0"] ~~~ T3B["Tile 3,1"]
+    end
+
+    style T0A fill:#4CAF50,color:#fff
+    style T0B fill:#4CAF50,color:#fff
+    style T1A fill:#FF9800,color:#fff
+    style T1B fill:#FF9800,color:#fff
+    style T2A fill:#2196F3,color:#fff
+    style T2B fill:#2196F3,color:#fff
+    style T3A fill:#9C27B0,color:#fff
+    style T3B fill:#9C27B0,color:#fff
+```
+
+The thread scaling sweep reveals diminishing returns — at small N (128), too many threads actually *hurts* because the overhead of creating/synchronizing threads exceeds the compute time. At large N (1024), more threads keep helping up to the hardware limit.
+
+### 8. Kernel Comparison
+
+| Kernel | Strategy | Cache | Cores | Speedup (N=1024) |
+|--------|----------|-------|-------|------------------|
 | `gemm_naive` | Triple loop, one cell | Poor | 1 | 1x (baseline) |
-| `gemm_tiled` | Block loop, one tile | Good | 1 | ~10-30x |
-| `gemm_parallel` | Block loop, split tiles | Good | All | ~30-100x |
+| `gemm_tiled` | Block loop, one tile | Good | 1 | ~8x |
+| `gemm_parallel` | Block loop, split tiles | Good | All | ~46x |
 
-### 8. Coming Next — Softmax (The Hard Parallelism Problem)
+### 9. Coming Next — Softmax (The Hard Parallelism Problem)
 
 GEMM tiles are **independent** — no communication needed. Softmax requires **reduction** across tiles: each tile computes a partial max and sum, then they must exchange results before normalizing. This mirrors how Graphcore's IPU handles BSP (Bulk Synchronous Parallel) communication.
 
@@ -275,16 +316,17 @@ graph TD
 
 ## Current Status
 
-Phases 1-5 are complete:
+Phases 1-6 are complete:
 
 - **Tensor class** — row-major `std::vector<float>` storage with bounds-checked `at()`, raw `data()` pointer, `fill`, `zero`, `randomize(seed)`
 - **Naive GEMM** — triple-loop `gemm_naive(A, B, C)` with dimension validation
 - **Tiled GEMM** — cache-friendly block-based `gemm_tiled(A, B, C, block_size)` with configurable tile size
+- **Parallel GEMM** — OpenMP-parallelized tiled GEMM with `collapse(2)` over output tiles, thread count configurable at runtime
 - **Timer** — `std::chrono`-based high-resolution timer for benchmarking
-- **Benchmark harness** — grouped output by matrix size, GFLOPS reporting, speedup vs baseline, best-kernel summary
-- **Test suite** — tensor tests (11 cases) and GEMM correctness tests (7 cases) using a minimal in-repo assertion framework
+- **Benchmark harness** — grouped output by matrix size, GFLOPS reporting, speedup vs baseline, thread scaling sweep (1/2/4/8/.../max), best-kernel summary
+- **Test suite** — tensor tests (11 cases) and GEMM correctness tests (15 cases: 7 naive + 4 tiled + 4 parallel) using a minimal in-repo assertion framework
 
-Upcoming: parallel GEMM (OpenMP), softmax kernels, scheduler abstraction, docs.
+Upcoming: softmax kernels, scheduler abstraction, docs.
 
 ## Repository Layout
 
@@ -301,11 +343,12 @@ Upcoming: parallel GEMM (OpenMP), softmax kernels, scheduler abstraction, docs.
 ├── src/
 │   ├── tensor.cpp                # Tensor implementation
 │   ├── gemm_naive.cpp            # naive GEMM kernel
-│   └── gemm_tiled.cpp            # tiled GEMM kernel
+│   ├── gemm_tiled.cpp            # tiled GEMM kernel
+│   └── gemm_parallel.cpp         # OpenMP parallel GEMM kernel
 ├── tests/
 │   ├── test_utils.h              # assertion macros
 │   ├── test_tensor.cpp           # tensor tests (11 cases)
-│   └── test_gemm.cpp             # GEMM correctness tests (7 cases)
+│   └── test_gemm.cpp             # GEMM correctness tests (15 cases)
 ├── CMakeLists.txt
 ├── Makefile
 └── tile_runtime.plan.md

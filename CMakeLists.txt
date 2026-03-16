@@ -21,6 +21,7 @@ add_library(tile_runtime_core STATIC
   src/tensor.cpp
   src/gemm_naive.cpp
   src/gemm_tiled.cpp
+  src/gemm_parallel.cpp
 )
 
 target_include_directories(tile_runtime_core

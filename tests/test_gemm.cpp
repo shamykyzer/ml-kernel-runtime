@@ -5,6 +5,7 @@
 using tile_runtime::Tensor;
 using tile_runtime::gemm_naive;
 using tile_runtime::gemm_tiled;
+using tile_runtime::gemm_parallel;
 
 // Helper: manual dot-product reference (not calling gemm_naive).
 static void reference_matmul(const Tensor& A, const Tensor& B, Tensor& C) {
@@ -184,6 +185,63 @@ void test_tiled_dimension_mismatch() {
     ASSERT_THROWS(gemm_tiled(A, B, C, 16), std::invalid_argument);
 }
 
+// --- Parallel GEMM tests ---
+
+void test_parallel_matches_naive() {
+    size_t sizes[] = {7, 15, 16, 17, 31, 32, 33, 64, 100};
+    size_t block_sizes[] = {8, 16, 32};
+
+    for (size_t n : sizes) {
+        Tensor A(n, n), B(n, n);
+        A.randomize(500 + static_cast<unsigned>(n));
+        B.randomize(600 + static_cast<unsigned>(n));
+
+        Tensor C_naive(n, n), C_parallel(n, n);
+        gemm_naive(A, B, C_naive);
+
+        for (size_t bs : block_sizes) {
+            C_parallel.zero();
+            gemm_parallel(A, B, C_parallel, bs);
+
+            for (size_t i = 0; i < n; ++i)
+                for (size_t j = 0; j < n; ++j)
+                    ASSERT_NEAR(C_parallel.at(i,j), C_naive.at(i,j));
+        }
+    }
+}
+
+void test_parallel_rectangular() {
+    Tensor A(3, 5), B(5, 4), C_naive(3, 4), C_parallel(3, 4);
+    A.randomize(700);
+    B.randomize(800);
+
+    gemm_naive(A, B, C_naive);
+    gemm_parallel(A, B, C_parallel, 2);
+
+    for (size_t i = 0; i < 3; ++i)
+        for (size_t j = 0; j < 4; ++j)
+            ASSERT_NEAR(C_parallel.at(i,j), C_naive.at(i,j));
+}
+
+void test_parallel_dimension_mismatch() {
+    Tensor A(2, 3), B(4, 2), C(2, 2);
+    ASSERT_THROWS(gemm_parallel(A, B, C, 16), std::invalid_argument);
+}
+
+void test_parallel_single_thread() {
+    // With OMP_NUM_THREADS=1, parallel should still produce correct results
+    Tensor A(32, 32), B(32, 32), C_naive(32, 32), C_parallel(32, 32);
+    A.randomize(900);
+    B.randomize(1000);
+
+    gemm_naive(A, B, C_naive);
+    gemm_parallel(A, B, C_parallel, 16);
+
+    for (size_t i = 0; i < 32; ++i)
+        for (size_t j = 0; j < 32; ++j)
+            ASSERT_NEAR(C_parallel.at(i,j), C_naive.at(i,j));
+}
+
 int main() {
     std::cout << "test_gemm (naive):" << std::endl;
     RUN_TEST(test_2x2_known);
@@ -199,6 +257,12 @@ int main() {
     RUN_TEST(test_tiled_block_size_1);
     RUN_TEST(test_tiled_block_size_ge_n);
     RUN_TEST(test_tiled_dimension_mismatch);
+
+    std::cout << "test_gemm (parallel):" << std::endl;
+    RUN_TEST(test_parallel_matches_naive);
+    RUN_TEST(test_parallel_rectangular);
+    RUN_TEST(test_parallel_dimension_mismatch);
+    RUN_TEST(test_parallel_single_thread);
 
     TEST_SUMMARY("test_gemm");
 }

@@ -116,6 +116,7 @@ isProject: false
 - Prefer `#pragma omp parallel for collapse(2)` over the output tile grid (`ii`, `jj`) so each thread owns distinct output regions.
 - Make thread count configurable through the benchmark harness rather than hard-coding it in the kernel.
 - Test with `OMP_NUM_THREADS=1` first, then scale up.
+- **Thread scaling benchmark**: sweep 1, 2, 4, 8 threads and report speedup curve per matrix size. Show where diminishing returns kick in and why (memory bandwidth saturation, false sharing). This directly maps to how IPU tile counts affect real workloads.
 
 ## Phase 7: Introduce Runtime-Style Tile Tasks
 
@@ -127,11 +128,12 @@ isProject: false
 ## Phase 8: Add A Minimal Scheduler Layer
 
 - Add [include/scheduler.h](/home/shamy/ml-kernel-runtime/include/scheduler.h) and [src/scheduler.cpp](/home/shamy/ml-kernel-runtime/src/scheduler.cpp).
-- Start with a deliberately simple scheduler:
+- Start with a deliberately simple **static scheduler**:
   - create the full task list
   - iterate or parallel-iterate across tasks
   - dispatch tile-local GEMM work for each task
 - Expose a clean entry point like `Scheduler::run_gemm(...)` so the code reads like a miniature runtime rather than a pile of loops.
+- **Work-stealing scheduler variant**: add a second scheduling strategy where idle threads steal tasks from a shared concurrent queue instead of being assigned tiles upfront. This models how real tile runtimes handle load imbalance when tiles have uneven work (e.g. edge tiles). Benchmark static vs work-stealing to show when each wins.
 
 ```mermaid
 flowchart TD
@@ -165,6 +167,7 @@ flowchart TD
 - Add [docs/performance_analysis.md](/home/shamy/ml-kernel-runtime/docs/performance_analysis.md) to summarize baseline, tiling gains, block-size sweep, and thread scaling.
 - Add [docs/poplibs_analysis.md](/home/shamy/ml-kernel-runtime/docs/poplibs_analysis.md) to explain the Graphcore-inspired ideas without overstating hardware fidelity.
 - Add [scripts/run_benchmarks.sh](/home/shamy/ml-kernel-runtime/scripts/run_benchmarks.sh) for a repeatable benchmark workflow.
+- **`make profile` target**: run `perf stat` to report hardware counters (L1/L2/L3 cache misses, branch mispredictions, instructions per cycle) alongside GFLOPS for each kernel. Showing cache miss rates drop as you go naive → tiled is far more convincing than GFLOPS alone — it proves you understand *why* tiling works, not just that it does.
 
 ## Phase 11: Naive Softmax Kernel
 
@@ -202,6 +205,7 @@ void softmax_tiled(const Tensor& input, Tensor& output, size_t block_size);
 ```
 
 - Validate against `softmax_naive` for correctness.
+- **Online softmax (single-pass)**: implement the algorithm from the FlashAttention paper — instead of two full passes over data (one for max, one for exp+sum), maintain a running max and correct the accumulated sum on the fly. This eliminates an entire data pass, which matters when data doesn't fit in local SRAM. Benchmark two-pass vs online to show the throughput difference.
 
 ## Phase 13: Parallel Softmax (OpenMP)
 
@@ -229,12 +233,13 @@ void softmax_parallel(const Tensor& input, Tensor& output, size_t block_size);
 3. Implement naive GEMM + correctness tests.
 4. Add timer + benchmark executable and record baseline.
 5. Implement tiled GEMM + compare block sizes.
-6. Implement OpenMP parallel GEMM + thread scaling.
-7. Add `TileTask` + `Scheduler` abstraction.
+6. Implement OpenMP parallel GEMM + thread scaling sweep (1/2/4/8 threads).
+7. Add `TileTask` + static scheduler + work-stealing scheduler variant.
 8. Implement naive softmax + correctness tests.
-9. Implement tiled softmax with partial reduction.
+9. Implement tiled softmax with partial reduction + online softmax (single-pass).
 10. Implement parallel softmax + benchmarks.
-11. Finish docs and benchmark analysis.
+11. Add `make profile` target with `perf stat` cache miss reporting.
+12. Finish docs and benchmark analysis.
 
 ## Risks To Watch
 
