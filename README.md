@@ -315,3 +315,30 @@ Deterministic seeding ensures reproducible inputs. Warmup stabilizes CPU frequen
 ## Design Decisions
 
 See [docs/design_decisions.md](docs/design_decisions.md) for rationale on bounds checking, output pre-allocation, row-major layout, namespace conventions, float tolerance, and the custom test framework.
+
+---
+
+## References
+
+### Graphcore / IPU Architecture
+
+- [Graphcore Poplibs](https://github.com/graphcore/poplibs) — open-source IPU kernel library this project draws inspiration from
+- [IPU Programmer's Guide — About the IPU](https://docs.graphcore.ai/projects/ipu-programmers-guide/en/latest/about_ipu.html) — tile architecture, local SRAM, execution model
+- [IPU Programmer's Guide — Programming Model](https://docs.graphcore.ai/projects/ipu-programmers-guide/en/latest/programming_model.html) — BSP compute/exchange phases
+- [Graphcore Memory & Performance Optimisation Guide](https://docs.graphcore.ai/projects/memory-performance-optimisation/en/latest/understand-ipu-programming-model.html) — tile-local compute and exchange phase mechanics
+- [Graphcore HPC Cookbook](https://github.com/graphcore/hpc-cookbook) — low-level Poplar C++ recipes including matrix multiplication patterns
+- [How to Build a Processor for Machine Intelligence](https://www.graphcore.ai/posts/how-to-build-a-processor-for-machine-intelligence-part-2) — Graphcore CTO Simon Knowles on BSP, tile-local memory, and exchange
+- Citadel Securities — *Dissecting the Graphcore IPU Architecture via Microbenchmarking* (2019): [arxiv.org/abs/1912.03413](https://arxiv.org/abs/1912.03413)
+
+### Parallel Computing & BSP
+
+- Leslie G. Valiant — *A Bridging Model for Parallel Computation*, CACM 1990: [dl.acm.org/doi/10.1145/79173.79181](https://dl.acm.org/doi/10.1145/79173.79181) — foundational BSP paper
+- [OpenMP API Specification](https://www.openmp.org/specifications/) — parallelism model used in `gemm_parallel`
+
+### GEMM & Cache Optimization
+
+- Goto & van de Geijn — *Anatomy of High-Performance Matrix Multiplication*, TOMS 2008: [dl.acm.org/doi/10.1145/1356052.1356053](https://dl.acm.org/doi/10.1145/1356052.1356053) — the canonical reference for cache-aware tiling strategy
+
+### Softmax & Online Algorithms
+
+- Tri Dao et al. — *FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness*, NeurIPS 2022: [arxiv.org/abs/2205.14135](https://arxiv.org/abs/2205.14135) — online softmax (single-pass log-sum-exp), the basis for Phase 12
