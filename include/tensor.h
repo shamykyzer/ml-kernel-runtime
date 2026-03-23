@@ -1,5 +1,7 @@
 #pragma once
 
+#include "aligned_allocator.h"
+
 #include <cstddef>
 #include <stdexcept>
 #include <vector>
@@ -29,7 +31,7 @@ public:
 private:
     size_t rows_;
     size_t cols_;
-    std::vector<float> data_;
+    std::vector<float, AlignedAllocator<float, 64>> data_;
 
     void bounds_check(size_t i, size_t j) const;
 };
