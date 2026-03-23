@@ -1,6 +1,6 @@
 # GEMM Kernel Optimization Engine
 
-**A C++17 tile-based matrix kernel runtime, achieving 46x speedup over naive GEMM through cache-aware tiling and OpenMP parallelism.**
+**A C++17 tile-based matrix kernel runtime with AVX2/AVX-512 SIMD vectorization, cache-line-aligned memory, and OpenMP parallelism.**
 
 Inspired by how ML accelerator runtimes (Graphcore Poplibs, XLA) schedule compute across tiles, this project implements progressively optimized GEMM kernels on CPU to explore the performance gap between naive and production-quality approaches.
 
@@ -9,7 +9,13 @@ Inspired by how ML accelerator runtimes (Graphcore Poplibs, XLA) schedule comput
   naive                      5454.15 ms      0.39 GFLOPS   (baseline)
   tiled  bs=16                646.11 ms      3.32 GFLOPS     8.4x
   parallel  bs=16  t=20       119.22 ms     18.01 GFLOPS    45.8x
+  avx2+fma  bs=16              ...           ...            ...
+  avx-512   bs=16              ...           ...            ...
+  std-simd  bs=16              ...           ...            ...
+  parallel+simd bs=16 t=20     ...           ...            ...
 ```
+
+> Run `make bench` to see actual numbers on your hardware.
 
 [View interactive performance chart](docs/gemm_performance_comparison.html)
 
@@ -17,10 +23,14 @@ Inspired by how ML accelerator runtimes (Graphcore Poplibs, XLA) schedule comput
 
 ## Features
 
-- **Three GEMM kernel variants** — naive triple-loop, cache-friendly tiled, and OpenMP-parallel tiled
+- **Seven GEMM kernel variants** — naive, tiled, parallel, AVX2+FMA, AVX-512, std::experimental::simd, and parallel+SIMD
+- **SIMD vectorization** — hand-tuned 4x8 (AVX2) and 4x16 (AVX-512) micro-kernels with FMA and prefetching
+- **Cache-line-aligned memory** — 64-byte aligned allocator for Tensor storage, optimized for SIMD loads and cache efficiency
+- **Runtime CPU detection** — CPUID-based feature detection guards SIMD kernel dispatch (AVX2, FMA, AVX-512F/VL)
+- **Portable SIMD** — std::experimental::simd kernel demonstrates C++ standard SIMD abstraction vs hand-written intrinsics
 - **Benchmark harness** — GFLOPS throughput, speedup vs baseline, block-size sweep, thread-scaling sweep
 - **Custom Tensor class** — row-major contiguous storage with bounds-checked access and raw pointer hot paths
-- **26 correctness tests** — exhaustive validation across edge cases (1x1, non-square, non-power-of-2, dimension mismatches)
+- **Correctness tests** — exhaustive validation across edge cases (1x1, non-square, non-power-of-2, non-SIMD-aligned dimensions)
 - **Zero external dependencies** — pure C++17 + optional OpenMP, no Boost or GoogleTest
 - **Cross-platform** — CI tested on GCC, Clang, and MSVC
 
@@ -46,6 +56,7 @@ graph TD
     subgraph "Kernel Layer"
         direction LR
         NAIVE["gemm_naive"] ~~~ TILED["gemm_tiled"] ~~~ PARALLEL["gemm_parallel"]
+        AVX["gemm_avx"] ~~~ AVX512["gemm_avx512"] ~~~ SIMD["gemm_simd"] ~~~ PARSIMD["gemm_parallel_simd"]
     end
     subgraph "Data Layer"
         direction LR
@@ -53,13 +64,19 @@ graph TD
     end
 
     BENCH --> NAIVE & TILED & PARALLEL
+    BENCH --> AVX & AVX512 & SIMD & PARSIMD
     BENCH --> TIMER
     NAIVE & TILED & PARALLEL --> TENSOR
+    AVX & AVX512 & SIMD & PARSIMD --> TENSOR
 
     style BENCH fill:#9C27B0,color:#fff
     style NAIVE fill:#f44336,color:#fff
     style TILED fill:#FF9800,color:#fff
     style PARALLEL fill:#4CAF50,color:#fff
+    style AVX fill:#2196F3,color:#fff
+    style AVX512 fill:#1565C0,color:#fff
+    style SIMD fill:#00BCD4,color:#fff
+    style PARSIMD fill:#009688,color:#fff
     style TENSOR fill:#607D8B,color:#fff
     style TIMER fill:#607D8B,color:#fff
 ```
@@ -73,29 +90,39 @@ graph TD
 ├── docs/
 │   └── design_decisions.md       # upfront design decisions
 ├── include/
-│   ├── tensor.h                  # Tensor class
-│   ├── gemm.h                    # GEMM kernel declarations
-│   └── timer.h                   # Timer class
+│   ├── tensor.h                  # Tensor class (64-byte aligned storage)
+│   ├── gemm.h                    # GEMM kernel declarations (7 variants)
+│   ├── timer.h                   # Timer class
+│   ├── aligned_allocator.h       # Cache-line-aligned allocator for std::vector
+│   └── cpu_features.h            # Runtime CPUID detection (AVX2/FMA/AVX-512)
 ├── src/
 │   ├── tensor.cpp                # Tensor implementation
 │   ├── gemm_naive.cpp            # naive GEMM kernel
 │   ├── gemm_tiled.cpp            # tiled GEMM kernel
-│   └── gemm_parallel.cpp         # OpenMP parallel GEMM kernel
+│   ├── gemm_parallel.cpp         # OpenMP parallel GEMM kernel
+│   ├── gemm_avx.cpp              # AVX2+FMA GEMM (4x8 micro-kernel)
+│   ├── gemm_avx512.cpp           # AVX-512 GEMM (4x16 micro-kernel, masked edges)
+│   ├── gemm_simd.cpp             # std::experimental::simd portable GEMM
+│   └── gemm_parallel_simd.cpp    # OpenMP + AVX2 combined GEMM
 ├── tests/
 │   ├── test_utils.h              # assertion macros
-│   ├── test_tensor.cpp           # tensor tests (11 cases)
-│   └── test_gemm.cpp             # GEMM correctness tests (15 cases)
+│   ├── test_tensor.cpp           # tensor tests (12 cases incl. alignment)
+│   └── test_gemm.cpp             # GEMM correctness tests (20+ cases)
 ├── CMakeLists.txt
 └── Makefile
 ```
 
 ## Kernel Comparison
 
-| Kernel | Strategy | Cache Behavior | Cores | Speedup (N=1024) |
-|--------|----------|----------------|-------|-------------------|
-| `gemm_naive` | Triple loop, one cell at a time | Poor — column traversal thrashes cache | 1 | 1x (baseline) |
-| `gemm_tiled` | Block loop, configurable tile size | Good — tiles fit in L1/L2 | 1 | ~8x |
-| `gemm_parallel` | Block loop, tiles split across cores | Good — tiles fit in L1/L2 | All | ~46x |
+| Kernel | Strategy | SIMD | Cores | Speedup (N=1024) |
+|--------|----------|------|-------|-------------------|
+| `gemm_naive` | Triple loop, one cell at a time | None | 1 | 1x (baseline) |
+| `gemm_tiled` | Block loop, configurable tile size | None | 1 | ~8x |
+| `gemm_parallel` | Block loop, tiles split across cores | None | All | ~46x |
+| `gemm_avx` | Tiled + AVX2 4x8 micro-kernel + FMA + prefetch | AVX2 (8-wide) | 1 | Run `make bench` |
+| `gemm_avx512` | Tiled + AVX-512 4x16 micro-kernel + masked edges | AVX-512 (16-wide) | 1 | Run `make bench` |
+| `gemm_simd` | Tiled + std::experimental::simd (portable) | native_simd | 1 | Run `make bench` |
+| `gemm_parallel_simd` | OpenMP parallel tiles + AVX2 inner loop | AVX2 (8-wide) | All | Run `make bench` |
 
 ### Thread Scaling
 
@@ -278,6 +305,7 @@ Deterministic seeding ensures reproducible inputs. Warmup stabilizes CPU frequen
 - [x] **Phase 4** — Timer + benchmark harness (GFLOPS, speedup, block/thread sweep)
 - [x] **Phase 5** — Tiled GEMM (cache-friendly block loop)
 - [x] **Phase 6** — Parallel GEMM (OpenMP + thread scaling benchmark)
+- [x] **Phase 6.5** — SIMD vectorization (AVX2+FMA, AVX-512, std-simd, parallel+SIMD, 64-byte aligned allocator, CPUID detection)
 - [ ] **Phase 7** — TileTask abstraction and `make_tasks()` helper
 - [ ] **Phase 8** — Minimal scheduler layer (static + work-stealing variant)
 - [ ] **Phase 9** — Full test coverage including scheduler tests
@@ -313,6 +341,11 @@ See [docs/design_decisions.md](docs/design_decisions.md) for rationale on bounds
 ### GEMM & Cache Optimization
 
 - Goto & van de Geijn — *Anatomy of High-Performance Matrix Multiplication*, TOMS 2008: [dl.acm.org/doi/10.1145/1356052.1356053](https://dl.acm.org/doi/10.1145/1356052.1356053) — the canonical reference for cache-aware tiling strategy
+
+### SIMD & Vectorization
+
+- [Intel Intrinsics Guide](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html) — reference for AVX2/AVX-512 intrinsics used in `gemm_avx` and `gemm_avx512`
+- [ISO/IEC TS 19570:2018 — std::experimental::simd](https://en.cppreference.com/w/cpp/experimental/simd) — C++ portable SIMD abstraction used in `gemm_simd`
 
 ### Softmax & Online Algorithms
 
