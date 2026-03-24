@@ -17,7 +17,9 @@ Inspired by how ML accelerator runtimes (Graphcore Poplibs, XLA) schedule comput
 
 > Run `make bench` to see actual numbers on your hardware.
 
-[![View Interactive Performance Chart](https://img.shields.io/badge/View-Interactive_Performance_Chart-8B5CF6?style=for-the-badge&logo=chartdotjs&logoColor=white)](https://shamykyzer.github.io/ml-kernel-runtime/gemm_performance_comparison.html)
+![GEMM Kernel Performance](docs/gemm_performance_chart.svg)
+
+[![View Interactive Chart](https://img.shields.io/badge/Interactive_Chart-8B5CF6?style=flat-square&logo=chartdotjs&logoColor=white)](https://shamykyzer.github.io/ml-kernel-runtime/gemm_performance_comparison.html)
 
 ---
 
