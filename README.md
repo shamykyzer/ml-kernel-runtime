@@ -6,18 +6,18 @@ Inspired by how ML accelerator runtimes (Graphcore Poplibs, XLA) schedule comput
 
 ```
 === N=1024 ===
-  naive                      5454.15 ms      0.39 GFLOPS   (baseline)
-  tiled  bs=16                646.11 ms      3.32 GFLOPS     8.4x
-  parallel  bs=16  t=20       119.22 ms     18.01 GFLOPS    45.8x
-  avx2+fma  bs=16              ...           ...            ...
-  avx-512   bs=16              ...           ...            ...
-  std-simd  bs=16              ...           ...            ...
-  parallel+simd bs=16 t=20     ...           ...            ...
+  naive                       7007.64 ms      0.31 GFLOPS   (baseline)
+  tiled  bs=16                 866.00 ms      2.48 GFLOPS      8.1x
+  parallel  bs=16  t=16        123.70 ms     17.36 GFLOPS     56.7x
+  avx2+fma  bs=16               65.07 ms     33.00 GFLOPS    107.7x
+  avx-512   bs=16               43.35 ms     49.54 GFLOPS    161.7x
+  std-simd  bs=16              155.57 ms     13.80 GFLOPS     45.0x
+  parallel+simd bs=16 t=16      12.09 ms    177.61 GFLOPS    579.6x
 ```
 
 > Run `make bench` to see actual numbers on your hardware.
 
-[View interactive performance chart](docs/gemm_performance_comparison.html)
+[View interactive performance chart](https://shamykyzer.github.io/ml-kernel-runtime/gemm_performance_comparison.html)
 
 ---
 

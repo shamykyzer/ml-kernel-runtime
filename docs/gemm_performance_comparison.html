@@ -3,97 +3,204 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GEMM Performance Comparison — ml-kernel-runtime</title>
+  <title>GEMM Performance Comparison</title>
   <style>
     :root {
-      --color-background: #1a1a1a;
-      --color-background-secondary: #2a2a2a;
-      --color-text: #c2c0b6;
-      --color-text-secondary: #888;
-      --color-text-danger: #e05252;
-      --color-text-warning: #d4901f;
-      --color-text-success: #1fba89;
-      --border-radius-md: 8px;
+      --bg: #0F172A;
+      --bg2: #1E293B;
+      --bg3: #334155;
+      --text: #F8FAFC;
+      --text2: #94A3B8;
+      --text3: #64748B;
+      --border: #334155;
+      --radius: 8px;
     }
     @media (prefers-color-scheme: light) {
       :root {
-        --color-background: #f5f5f5;
-        --color-background-secondary: #e8e8e8;
-        --color-text: #3d3d3a;
-        --color-text-secondary: #666;
-        --color-text-danger: #c0392b;
-        --color-text-warning: #b7770d;
-        --color-text-success: #1a8a62;
+        --bg: #F8FAFC;
+        --bg2: #F1F5F9;
+        --bg3: #E2E8F0;
+        --text: #0F172A;
+        --text2: #475569;
+        --text3: #94A3B8;
+        --border: #CBD5E1;
       }
     }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--color-background);
-      color: var(--color-text);
-      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       padding: 2rem;
-      max-width: 720px;
+      max-width: 960px;
+      margin: 0 auto;
     }
-    h2 {
-      font-size: 18px;
-      font-weight: 600;
-      margin: 0 0 1.25rem;
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: var(--text2); margin-bottom: 1.5rem; }
+    .highlight-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 1.5rem;
     }
-    .subtitle {
+    .highlight-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      text-align: center;
+    }
+    .highlight-card .label { font-size: 11px; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .highlight-card .value { font-size: 26px; font-weight: 700; }
+    .highlight-card .detail { font-size: 11px; color: var(--text3); margin-top: 4px; }
+    .section-title { font-size: 15px; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--text); }
+    .chart-container { position: relative; width: 100%; height: 320px; margin-bottom: 0.5rem; }
+    .chart-container-sm { position: relative; width: 100%; height: 260px; margin-bottom: 0.5rem; }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-size: 11px;
+      color: var(--text2);
+      margin-bottom: 1.5rem;
+    }
+    .legend span { display: flex; align-items: center; gap: 5px; }
+    .legend .dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+    .table-wrap { overflow-x: auto; margin-bottom: 1.5rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
       font-size: 13px;
-      color: var(--color-text-secondary);
-      margin: -0.75rem 0 1.5rem;
     }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 2px solid var(--border);
+      color: var(--text2);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    tr:last-child td { border-bottom: none; }
+    .mono { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 12px; }
+    .best { color: #A78BFA; font-weight: 600; }
+    footer { margin-top: 2rem; font-size: 11px; color: var(--text3); }
+    footer a { color: var(--text2); }
   </style>
 </head>
 <body>
-  <h2>GEMM Performance Comparison</h2>
-  <p class="subtitle">N=1024 square matrix — naive vs tiled vs parallel (20 threads)</p>
+  <h1>GEMM Performance Comparison</h1>
+  <p class="subtitle">N=1024 square matrices, bs=16, best thread count for parallel kernels</p>
 
-  <div style="padding: 1rem 0;">
-    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 1.5rem;">
-      <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1rem; text-align: center;">
-        <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0 0 4px;">Naive</p>
-        <p style="font-size: 22px; font-weight: 500; margin: 0; color: var(--color-text-danger);">5,454 ms</p>
-        <p style="font-size: 12px; color: var(--color-text-secondary); margin: 4px 0 0;">0.39 GFLOPS</p>
-      </div>
-      <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1rem; text-align: center;">
-        <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0 0 4px;">Tiled (bs=16)</p>
-        <p style="font-size: 22px; font-weight: 500; margin: 0; color: var(--color-text-warning);">646 ms</p>
-        <p style="font-size: 12px; color: var(--color-text-secondary); margin: 4px 0 0;">3.32 GFLOPS — 8.4x</p>
-      </div>
-      <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 1rem; text-align: center;">
-        <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0 0 4px;">Parallel (bs=16, 20 threads)</p>
-        <p style="font-size: 22px; font-weight: 500; margin: 0; color: var(--color-text-success);">119 ms</p>
-        <p style="font-size: 12px; color: var(--color-text-secondary); margin: 4px 0 0;">18.01 GFLOPS — 45.8x</p>
-      </div>
+  <div class="highlight-row">
+    <div class="highlight-card">
+      <div class="label">Baseline (naive)</div>
+      <div class="value" style="color: #EF4444;">0.31</div>
+      <div class="detail">GFLOPS / 7,008 ms</div>
     </div>
-
-    <div style="position: relative; width: 100%; height: 260px;">
-      <canvas id="perfChart"></canvas>
+    <div class="highlight-card">
+      <div class="label">Best single-thread (AVX-512)</div>
+      <div class="value" style="color: #38BDF8;">49.5</div>
+      <div class="detail">GFLOPS / 43 ms / 162x</div>
     </div>
-    <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--color-text-secondary);">
-      <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #A32D2D;"></span>Naive — 0.39 GFLOPS</span>
-      <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #BA7517;"></span>Tiled — 3.32 GFLOPS</span>
-      <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; border-radius: 2px; background: #1D9E75;"></span>Parallel — 18.01 GFLOPS</span>
+    <div class="highlight-card">
+      <div class="label">Best overall (parallel+SIMD)</div>
+      <div class="value" style="color: #A78BFA;">177.6</div>
+      <div class="detail">GFLOPS / 12 ms / 580x</div>
     </div>
   </div>
+
+  <p class="section-title">GFLOPS by Kernel</p>
+  <div class="chart-container">
+    <canvas id="mainChart"></canvas>
+  </div>
+  <div class="legend">
+    <span><span class="dot" style="background:#EF4444;"></span>Naive: 0.31 GFLOPS</span>
+    <span><span class="dot" style="background:#F97316;"></span>Tiled: 2.48 GFLOPS</span>
+    <span><span class="dot" style="background:#22C55E;"></span>Parallel: 17.36 GFLOPS</span>
+    <span><span class="dot" style="background:#3B82F6;"></span>AVX2+FMA: 33.00 GFLOPS</span>
+    <span><span class="dot" style="background:#1D4ED8;"></span>AVX-512: 49.54 GFLOPS</span>
+    <span><span class="dot" style="background:#06B6D4;"></span>std::simd: 13.80 GFLOPS</span>
+    <span><span class="dot" style="background:#8B5CF6;"></span>Parallel+SIMD: 177.61 GFLOPS</span>
+  </div>
+
+  <p class="section-title">Parallel+SIMD Thread Scaling (N=1024)</p>
+  <div class="chart-container-sm">
+    <canvas id="threadChart"></canvas>
+  </div>
+
+  <p class="section-title">Full Results (N=1024)</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Kernel</th>
+          <th>Threads</th>
+          <th>Time (ms)</th>
+          <th>GFLOPS</th>
+          <th>Speedup</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">gemm_naive</td><td>1</td>
+          <td>7,007.64</td><td>0.31</td><td>1.0x</td>
+        </tr>
+        <tr>
+          <td class="mono">gemm_tiled</td><td>1</td>
+          <td>866.00</td><td>2.48</td><td>8.1x</td>
+        </tr>
+        <tr>
+          <td class="mono">gemm_parallel</td><td>16</td>
+          <td>123.70</td><td>17.36</td><td>56.7x</td>
+        </tr>
+        <tr>
+          <td class="mono">gemm_avx</td><td>1</td>
+          <td>65.07</td><td>33.00</td><td>107.7x</td>
+        </tr>
+        <tr>
+          <td class="mono">gemm_avx512</td><td>1</td>
+          <td>43.35</td><td>49.54</td><td>161.7x</td>
+        </tr>
+        <tr>
+          <td class="mono">gemm_simd</td><td>1</td>
+          <td>155.57</td><td>13.80</td><td>45.0x</td>
+        </tr>
+        <tr class="best">
+          <td class="mono best">gemm_parallel_simd</td><td>16</td>
+          <td>12.09</td><td>177.61</td><td>579.6x</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    Data from <a href="../benchmark_results.csv">benchmark_results.csv</a>.
+    Run <code>make bench</code> to reproduce on your hardware.
+  </footer>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <script>
     const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
-    const textColor = isDark ? '#c2c0b6' : '#3d3d3a';
-    const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    const textColor = isDark ? '#94A3B8' : '#475569';
+    const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
 
-    new Chart(document.getElementById('perfChart'), {
+    const kernelColors = ['#EF4444', '#F97316', '#22C55E', '#3B82F6', '#1D4ED8', '#06B6D4', '#8B5CF6'];
+
+    new Chart(document.getElementById('mainChart'), {
       type: 'bar',
       data: {
-        labels: ['Naive', 'Tiled (bs=16)', 'Parallel (20t)'],
+        labels: ['Naive', 'Tiled', 'Parallel (16t)', 'AVX2+FMA', 'AVX-512', 'std::simd', 'Parallel+SIMD (16t)'],
         datasets: [{
-          data: [0.39, 3.32, 18.01],
-          backgroundColor: ['#A32D2D', '#BA7517', '#1D9E75'],
-          borderRadius: 6,
-          barPercentage: 0.6
+          data: [0.31, 2.48, 17.36, 33.00, 49.54, 13.80, 177.61],
+          backgroundColor: kernelColors,
+          borderRadius: 4,
+          barPercentage: 0.65
         }]
       },
       options: {
@@ -102,17 +209,77 @@
         indexAxis: 'y',
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: (c) => c.raw + ' GFLOPS' } }
+          tooltip: {
+            callbacks: {
+              label: (c) => c.raw.toFixed(2) + ' GFLOPS'
+            }
+          }
         },
         scales: {
           x: {
-            title: { display: true, text: 'GFLOPS (higher = faster)', color: textColor, font: { size: 12 } },
+            title: { display: true, text: 'GFLOPS (higher is faster)', color: textColor, font: { size: 12 } },
             grid: { color: gridColor },
             ticks: { color: textColor }
           },
           y: {
             grid: { display: false },
-            ticks: { color: textColor, font: { size: 13 } }
+            ticks: { color: textColor, font: { size: 12 } }
+          }
+        }
+      }
+    });
+
+    new Chart(document.getElementById('threadChart'), {
+      type: 'line',
+      data: {
+        labels: ['1', '2', '4', '8', '16', '20'],
+        datasets: [{
+          label: 'Parallel+SIMD',
+          data: [26.93, 50.82, 85.99, 157.12, 177.61, 135.95],
+          borderColor: '#8B5CF6',
+          backgroundColor: 'rgba(139, 92, 246, 0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 5,
+          pointBackgroundColor: '#8B5CF6',
+          pointBorderColor: isDark ? '#0F172A' : '#F8FAFC',
+          pointBorderWidth: 2
+        }, {
+          label: 'Parallel (scalar)',
+          data: [2.47, 4.80, 8.78, 10.86, 17.36, 15.71],
+          borderColor: '#22C55E',
+          backgroundColor: 'rgba(34, 197, 94, 0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 5,
+          pointBackgroundColor: '#22C55E',
+          pointBorderColor: isDark ? '#0F172A' : '#F8FAFC',
+          pointBorderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: textColor, usePointStyle: true, pointStyle: 'circle', font: { size: 12 } }
+          },
+          tooltip: {
+            callbacks: {
+              label: (c) => c.dataset.label + ': ' + c.raw.toFixed(2) + ' GFLOPS'
+            }
+          }
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Threads', color: textColor, font: { size: 12 } },
+            grid: { color: gridColor },
+            ticks: { color: textColor }
+          },
+          y: {
+            title: { display: true, text: 'GFLOPS', color: textColor, font: { size: 12 } },
+            grid: { color: gridColor },
+            ticks: { color: textColor }
           }
         }
       }
