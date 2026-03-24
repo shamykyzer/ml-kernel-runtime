@@ -120,13 +120,13 @@
     <canvas id="mainChart"></canvas>
   </div>
   <div class="legend">
-    <span><span class="dot" style="background:#EF4444;"></span>Naive: 0.31 GFLOPS</span>
-    <span><span class="dot" style="background:#F97316;"></span>Tiled: 2.48 GFLOPS</span>
-    <span><span class="dot" style="background:#22C55E;"></span>Parallel: 17.36 GFLOPS</span>
-    <span><span class="dot" style="background:#3B82F6;"></span>AVX2+FMA: 33.00 GFLOPS</span>
-    <span><span class="dot" style="background:#1D4ED8;"></span>AVX-512: 49.54 GFLOPS</span>
-    <span><span class="dot" style="background:#06B6D4;"></span>std::simd: 13.80 GFLOPS</span>
-    <span><span class="dot" style="background:#8B5CF6;"></span>Parallel+SIMD: 177.61 GFLOPS</span>
+    <span><span class="dot" style="background:#EF4444;"></span>Naive</span>
+    <span><span class="dot" style="background:#F97316;"></span>Tiled</span>
+    <span><span class="dot" style="background:#06B6D4;"></span>std::simd</span>
+    <span><span class="dot" style="background:#22C55E;"></span>Parallel</span>
+    <span><span class="dot" style="background:#3B82F6;"></span>AVX2+FMA</span>
+    <span><span class="dot" style="background:#1D4ED8;"></span>AVX-512</span>
+    <span><span class="dot" style="background:#8B5CF6;"></span>Parallel+SIMD</span>
   </div>
 
   <p class="section-title">Parallel+SIMD Thread Scaling (N=1024)</p>
@@ -156,6 +156,10 @@
           <td>866.00</td><td>2.48</td><td>8.1x</td>
         </tr>
         <tr>
+          <td class="mono">gemm_simd</td><td>1</td>
+          <td>155.57</td><td>13.80</td><td>45.0x</td>
+        </tr>
+        <tr>
           <td class="mono">gemm_parallel</td><td>16</td>
           <td>123.70</td><td>17.36</td><td>56.7x</td>
         </tr>
@@ -166,10 +170,6 @@
         <tr>
           <td class="mono">gemm_avx512</td><td>1</td>
           <td>43.35</td><td>49.54</td><td>161.7x</td>
-        </tr>
-        <tr>
-          <td class="mono">gemm_simd</td><td>1</td>
-          <td>155.57</td><td>13.80</td><td>45.0x</td>
         </tr>
         <tr class="best">
           <td class="mono best">gemm_parallel_simd</td><td>16</td>
@@ -195,10 +195,10 @@
     new Chart(document.getElementById('mainChart'), {
       type: 'bar',
       data: {
-        labels: ['Naive', 'Tiled', 'Parallel (16t)', 'AVX2+FMA', 'AVX-512', 'std::simd', 'Parallel+SIMD (16t)'],
+        labels: ['Naive', 'Tiled', 'std::simd', 'Parallel (16t)', 'AVX2+FMA', 'AVX-512', 'Parallel+SIMD (16t)'],
         datasets: [{
-          data: [0.31, 2.48, 17.36, 33.00, 49.54, 13.80, 177.61],
-          backgroundColor: kernelColors,
+          data: [0.31, 2.48, 13.80, 17.36, 33.00, 49.54, 177.61],
+          backgroundColor: ['#EF4444', '#F97316', '#06B6D4', '#22C55E', '#3B82F6', '#1D4ED8', '#8B5CF6'],
           borderRadius: 4,
           barPercentage: 0.65
         }]
