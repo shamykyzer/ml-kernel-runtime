@@ -18,6 +18,15 @@ Inspired by how ML accelerator runtimes (Graphcore Poplibs, XLA) schedule comput
 
 > Run `make bench` to see actual numbers on your hardware.
 
+### Benchmark Environment
+
+| Component | Detail |
+|-----------|--------|
+| **CPU** | AMD Ryzen AI 9 365 w/ Radeon 880M (10C/20T, AVX-512) |
+| **OS** | WSL2 (Linux 6.6) on Windows |
+| **Compiler** | GCC with `-O3 -march=native` |
+| **Build** | CMake 3.14+, Make |
+
 [![View Interactive Chart](https://img.shields.io/badge/Interactive_Chart-8B5CF6?style=flat-square&logo=chartdotjs&logoColor=white)](https://shamykyzer.github.io/ml-kernel-runtime/gemm_performance_comparison.html)
 
 ![GEMM Kernel Performance](docs/gemm_performance_chart.svg)
