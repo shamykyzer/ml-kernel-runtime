@@ -17,9 +17,9 @@ Inspired by how ML accelerator runtimes (Graphcore Poplibs, XLA) schedule comput
 
 > Run `make bench` to see actual numbers on your hardware.
 
-![GEMM Kernel Performance](docs/gemm_performance_chart.svg)
-
 [![View Interactive Chart](https://img.shields.io/badge/Interactive_Chart-8B5CF6?style=flat-square&logo=chartdotjs&logoColor=white)](https://shamykyzer.github.io/ml-kernel-runtime/gemm_performance_comparison.html)
+
+![GEMM Kernel Performance](docs/gemm_performance_chart.svg)
 
 ---
 
@@ -105,6 +105,8 @@ The parallel kernel distributes output tiles across CPU cores via OpenMP. Each t
 ![Parallel tile distribution across 4 threads](docs/parallel_tiles.svg)
 
 At small matrix sizes (N=128), thread overhead dominates and adding more threads actually hurts. At large N (1024+), scaling continues up to the hardware thread limit.
+
+![Thread Scaling Chart](docs/thread_scaling_chart.svg)
 
 ---
 
