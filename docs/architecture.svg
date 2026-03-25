@@ -54,7 +54,7 @@
 
   <rect x="460" y="224" width="170" height="44" rx="8" fill="#16A34A" filter="url(#shadow)"/>
   <text x="545" y="245" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">gemm_parallel</text>
-  <text x="545" y="260" text-anchor="middle" fill="#BBF7D0" font-size="9">OpenMP + tiled · 46× speedup</text>
+  <text x="545" y="260" text-anchor="middle" fill="#BBF7D0" font-size="9">OpenMP + tiled · 48× speedup</text>
 
   <!-- SIMD row -->
   <text x="62" y="302" fill="#64748B" font-size="10" font-weight="600">SIMD</text>

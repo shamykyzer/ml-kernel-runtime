@@ -15,13 +15,13 @@
   </defs>
 
   <rect width="900" height="420" rx="12" fill="#0F172A"/>
-  <text x="450" y="35" text-anchor="middle" fill="#F8FAFC" font-size="18" font-weight="700">Thread Scaling (N=1024, bs=32)</text>
-  <text x="450" y="55" text-anchor="middle" fill="#64748B" font-size="11">GFLOPS vs thread count. Parallel+AVX-512 peaks at 309 GFLOPS (20 threads).</text>
+  <text x="450" y="35" text-anchor="middle" fill="#F8FAFC" font-size="18" font-weight="700">Thread Scaling (N=1024)</text>
+  <text x="450" y="55" text-anchor="middle" fill="#64748B" font-size="11">GFLOPS vs thread count. Parallel+AVX-512 peaks at 416 GFLOPS (18 threads).</text>
 
   <!-- Chart area: x=100..820, y=80..340 -->
-  <!-- Y axis: 0 to 320 GFLOPS -->
-  <!-- Scale: 260px / 320 = 0.8125px per GFLOP -->
-  <!-- y = 340 - (gflops * 0.8125) -->
+  <!-- Y axis: 0 to 440 GFLOPS -->
+  <!-- Scale: 260px / 440 = 0.591px per GFLOP -->
+  <!-- y = 340 - (gflops * 0.591) -->
 
   <!-- Grid lines -->
   <line x1="100" y1="340" x2="820" y2="340" stroke="#334155" stroke-width="1"/>
@@ -30,99 +30,105 @@
   <line x1="100" y1="145" x2="820" y2="145" stroke="#1E293B" stroke-width="1"/>
   <line x1="100" y1="80" x2="820" y2="80" stroke="#1E293B" stroke-width="1"/>
 
-  <!-- Y axis labels (0, 80, 160, 240, 320) -->
+  <!-- Y axis labels (0, 110, 220, 330, 440) -->
   <text x="90" y="344" text-anchor="end" fill="#64748B" font-size="10">0</text>
-  <text x="90" y="279" text-anchor="end" fill="#64748B" font-size="10">80</text>
-  <text x="90" y="214" text-anchor="end" fill="#64748B" font-size="10">160</text>
-  <text x="90" y="149" text-anchor="end" fill="#64748B" font-size="10">240</text>
-  <text x="90" y="84" text-anchor="end" fill="#64748B" font-size="10">320</text>
+  <text x="90" y="279" text-anchor="end" fill="#64748B" font-size="10">110</text>
+  <text x="90" y="214" text-anchor="end" fill="#64748B" font-size="10">220</text>
+  <text x="90" y="149" text-anchor="end" fill="#64748B" font-size="10">330</text>
+  <text x="90" y="84" text-anchor="end" fill="#64748B" font-size="10">440</text>
 
   <!-- Y axis title -->
   <text x="25" y="210" text-anchor="middle" fill="#94A3B8" font-size="11" transform="rotate(-90 25 210)">GFLOPS</text>
 
-  <!-- X axis positions: 1=140, 2=260, 4=380, 8=500, 16=620, 20=740 -->
+  <!-- X axis positions: 1=140, 2=240, 4=340, 8=440, 16=540, 18=640, 20=740 -->
   <text x="140" y="358" text-anchor="middle" fill="#64748B" font-size="11">1</text>
-  <text x="260" y="358" text-anchor="middle" fill="#64748B" font-size="11">2</text>
-  <text x="380" y="358" text-anchor="middle" fill="#64748B" font-size="11">4</text>
-  <text x="500" y="358" text-anchor="middle" fill="#64748B" font-size="11">8</text>
-  <text x="620" y="358" text-anchor="middle" fill="#64748B" font-size="11">16</text>
+  <text x="240" y="358" text-anchor="middle" fill="#64748B" font-size="11">2</text>
+  <text x="340" y="358" text-anchor="middle" fill="#64748B" font-size="11">4</text>
+  <text x="440" y="358" text-anchor="middle" fill="#64748B" font-size="11">8</text>
+  <text x="540" y="358" text-anchor="middle" fill="#64748B" font-size="11">16</text>
+  <text x="640" y="358" text-anchor="middle" fill="#64748B" font-size="11">18</text>
   <text x="740" y="358" text-anchor="middle" fill="#64748B" font-size="11">20</text>
 
   <!-- X axis title -->
   <text x="450" y="385" text-anchor="middle" fill="#94A3B8" font-size="11">Threads</text>
 
-  <!-- Parallel+AVX-512: 56.92, 110.07, 198.74, 215.90, 262.14, 308.99 -->
-  <!-- y: 294, 251, 179, 165, 127, 89 -->
+  <!-- Parallel+AVX-512 (bs=64): 67.86, 110.75, 141.88, 274.74, 406.57, 415.56, 256.20 -->
+  <!-- y: 300, 275, 256, 178, 100, 94, 189 -->
 
   <!-- Parallel+AVX-512 fill area -->
-  <polygon points="140,294 260,251 380,179 500,165 620,127 740,89 740,340 140,340"
+  <polygon points="140,300 240,275 340,256 440,178 540,100 640,94 740,189 740,340 140,340"
            fill="url(#redFill)"/>
 
   <!-- Parallel+AVX-512 line -->
-  <polyline points="140,294 260,251 380,179 500,165 620,127 740,89"
+  <polyline points="140,300 240,275 340,256 440,178 540,100 640,94 740,189"
             fill="none" stroke="#E11D48" stroke-width="2.5" stroke-linejoin="round"/>
 
   <!-- Parallel+AVX-512 points -->
-  <circle cx="140" cy="294" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="260" cy="251" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="380" cy="179" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="500" cy="165" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="620" cy="127" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="740" cy="89" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="140" cy="300" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="240" cy="275" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="340" cy="256" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="440" cy="178" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="540" cy="100" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="640" cy="94" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="740" cy="189" r="5" fill="#E11D48" stroke="#0F172A" stroke-width="2"/>
 
   <!-- Parallel+AVX-512 data labels -->
-  <text x="140" y="286" text-anchor="middle" fill="#FFC7D2" font-size="9">56.9</text>
-  <text x="260" y="243" text-anchor="middle" fill="#FFC7D2" font-size="9">110.1</text>
-  <text x="380" y="171" text-anchor="middle" fill="#FFC7D2" font-size="9">198.7</text>
-  <text x="500" y="157" text-anchor="middle" fill="#FFC7D2" font-size="9">215.9</text>
-  <text x="620" y="119" text-anchor="middle" fill="#FFC7D2" font-size="9">262.1</text>
-  <text x="740" y="81" text-anchor="middle" fill="#FFC7D2" font-size="9">309.0</text>
+  <text x="140" y="292" text-anchor="middle" fill="#FFC7D2" font-size="9">67.9</text>
+  <text x="240" y="267" text-anchor="middle" fill="#FFC7D2" font-size="9">110.8</text>
+  <text x="340" y="248" text-anchor="middle" fill="#FFC7D2" font-size="9">141.9</text>
+  <text x="440" y="170" text-anchor="middle" fill="#FFC7D2" font-size="9">274.7</text>
+  <text x="540" y="92" text-anchor="middle" fill="#FFC7D2" font-size="9">406.6</text>
+  <text x="640" y="86" text-anchor="middle" fill="#FFC7D2" font-size="9">415.6</text>
+  <text x="740" y="181" text-anchor="middle" fill="#FFC7D2" font-size="9">256.2</text>
 
-  <!-- Parallel+SIMD: 30.53, 61.90, 116.34, 139.40, 157.88, 140.99 -->
-  <!-- y: 315, 290, 246, 227, 212, 226 -->
+  <!-- Parallel+SIMD (bs=128): 36.96, 62.25, 99.10, 164.67, 235.75, 240.83, 219.02 -->
+  <!-- y: 318, 303, 281, 243, 201, 198, 211 -->
 
   <!-- Parallel+SIMD fill area -->
-  <polygon points="140,315 260,290 380,246 500,227 620,212 740,226 740,340 140,340"
+  <polygon points="140,318 240,303 340,281 440,243 540,201 640,198 740,211 740,340 140,340"
            fill="url(#purpleFill)"/>
 
   <!-- Parallel+SIMD line -->
-  <polyline points="140,315 260,290 380,246 500,227 620,212 740,226"
+  <polyline points="140,318 240,303 340,281 440,243 540,201 640,198 740,211"
             fill="none" stroke="#8B5CF6" stroke-width="2.5" stroke-linejoin="round"/>
 
   <!-- Parallel+SIMD points -->
-  <circle cx="140" cy="315" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="260" cy="290" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="380" cy="246" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="500" cy="227" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="620" cy="212" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="740" cy="226" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="140" cy="318" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="240" cy="303" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="340" cy="281" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="440" cy="243" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="540" cy="201" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="640" cy="198" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="740" cy="211" r="4" fill="#8B5CF6" stroke="#0F172A" stroke-width="2"/>
 
   <!-- Parallel+SIMD data labels -->
-  <text x="140" y="330" text-anchor="middle" fill="#C4B5FD" font-size="9">30.5</text>
-  <text x="260" y="305" text-anchor="middle" fill="#C4B5FD" font-size="9">61.9</text>
-  <text x="380" y="261" text-anchor="middle" fill="#C4B5FD" font-size="9">116.3</text>
-  <text x="500" y="242" text-anchor="middle" fill="#C4B5FD" font-size="9">139.4</text>
-  <text x="620" y="205" text-anchor="middle" fill="#C4B5FD" font-size="9">157.9</text>
-  <text x="740" y="219" text-anchor="middle" fill="#C4B5FD" font-size="9">141.0</text>
+  <text x="140" y="333" text-anchor="middle" fill="#C4B5FD" font-size="9">37.0</text>
+  <text x="240" y="318" text-anchor="middle" fill="#C4B5FD" font-size="9">62.3</text>
+  <text x="340" y="296" text-anchor="middle" fill="#C4B5FD" font-size="9">99.1</text>
+  <text x="440" y="258" text-anchor="middle" fill="#C4B5FD" font-size="9">164.7</text>
+  <text x="540" y="216" text-anchor="middle" fill="#C4B5FD" font-size="9">235.8</text>
+  <text x="640" y="213" text-anchor="middle" fill="#C4B5FD" font-size="9">240.8</text>
+  <text x="740" y="226" text-anchor="middle" fill="#C4B5FD" font-size="9">219.0</text>
 
-  <!-- Parallel (scalar): 1.17, 3.26, 5.95, 8.67, 13.35, 10.94 -->
-  <!-- y: 339, 337, 335, 333, 329, 331 -->
+  <!-- Parallel (scalar, bs=16): 3.22, 5.76, 9.87, 13.79, 16.14, 16.70, 16.36 -->
+  <!-- y: 338, 337, 334, 332, 330, 330, 330 -->
 
   <!-- Parallel fill area -->
-  <polygon points="140,339 260,337 380,335 500,333 620,329 740,331 740,340 140,340"
+  <polygon points="140,338 240,337 340,334 440,332 540,330 640,330 740,330 740,340 140,340"
            fill="url(#greenFill)"/>
 
   <!-- Parallel line -->
-  <polyline points="140,339 260,337 380,335 500,333 620,329 740,331"
+  <polyline points="140,338 240,337 340,334 440,332 540,330 640,330 740,330"
             fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linejoin="round"/>
 
   <!-- Parallel points -->
-  <circle cx="140" cy="339" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="260" cy="337" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="380" cy="335" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="500" cy="333" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="620" cy="329" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
-  <circle cx="740" cy="331" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="140" cy="338" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="240" cy="337" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="340" cy="334" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="440" cy="332" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="540" cy="330" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="640" cy="330" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
+  <circle cx="740" cy="330" r="3" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>
 
   <!-- Legend -->
   <rect x="220" y="64" width="12" height="12" rx="3" fill="#E11D48"/>
@@ -133,6 +139,6 @@
   <text x="537" y="75" fill="#86EFAC" font-size="11">Parallel (scalar)</text>
 
   <!-- Peak annotation -->
-  <rect x="740" y="92" width="95" height="18" rx="4" fill="#1E293B" stroke="#E11D48" stroke-width="1"/>
-  <text x="787" y="105" text-anchor="middle" fill="#FFC7D2" font-size="10" font-weight="600">peak: 20t</text>
+  <rect x="640" y="72" width="95" height="18" rx="4" fill="#1E293B" stroke="#E11D48" stroke-width="1"/>
+  <text x="687" y="85" text-anchor="middle" fill="#FFC7D2" font-size="10" font-weight="600">peak: 18t</text>
 </svg>

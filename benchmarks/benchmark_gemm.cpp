@@ -161,7 +161,7 @@ static void print_row(const BenchResult& r, double baseline_ms) {
 // Build thread counts to sweep: 1, 2, 4, ... up to max
 static std::vector<int> thread_counts(int max_t) {
     std::vector<int> counts;
-    for (int t = 1; t <= max_t; t *= 2) {
+    for (int t = 1; t <= max_t; t += (t < 4 ? 1 : 2)) {
         counts.push_back(t);
     }
     if (counts.back() != max_t) {
@@ -172,7 +172,7 @@ static std::vector<int> thread_counts(int max_t) {
 
 int main() {
     const std::vector<size_t> sizes = {128, 256, 512, 1024};
-    const std::vector<size_t> block_sizes = {16, 32, 64};
+    const std::vector<size_t> block_sizes = {16, 32, 48, 64, 128};
     const int warmup = 2;
     const int trials = 5;
     const int max_threads = get_max_threads();
@@ -224,59 +224,69 @@ int main() {
             record(tiled);
         }
 
-        // --- Parallel thread scaling (use best block size) ---
+        // --- Parallel thread scaling (sweep block sizes) ---
         auto threads = thread_counts(max_threads);
-        for (int t : threads) {
-            auto par = bench_parallel("parallel", N, best_bs,
-                                      tile_runtime::gemm_parallel,
-                                      warmup, trials, t);
-            print_row(par, naive.time_ms);
-            record(par);
+        for (size_t bs : block_sizes) {
+            for (int t : threads) {
+                auto par = bench_parallel("parallel", N, bs,
+                                          tile_runtime::gemm_parallel,
+                                          warmup, trials, t);
+                print_row(par, naive.time_ms);
+                record(par);
+            }
         }
 
-        // --- SIMD kernels (single-threaded) ---
+        // --- SIMD kernels (sweep block sizes) ---
         if (cpu.avx2 && cpu.fma) {
-            auto avx = bench_tiled("avx2+fma", N, best_bs,
-                                    tile_runtime::gemm_avx, warmup, trials);
-            print_row(avx, naive.time_ms);
-            record(avx);
+            for (size_t bs : block_sizes) {
+                auto avx = bench_tiled("avx2+fma", N, bs,
+                                        tile_runtime::gemm_avx, warmup, trials);
+                print_row(avx, naive.time_ms);
+                record(avx);
+            }
         }
 
         if (cpu.avx512f) {
-            auto avx512 = bench_tiled("avx-512", N, best_bs,
-                                       tile_runtime::gemm_avx512, warmup, trials);
-            print_row(avx512, naive.time_ms);
-            record(avx512);
+            for (size_t bs : block_sizes) {
+                auto avx512 = bench_tiled("avx-512", N, bs,
+                                           tile_runtime::gemm_avx512, warmup, trials);
+                print_row(avx512, naive.time_ms);
+                record(avx512);
+            }
         }
 
 #ifdef TILE_HAS_STD_SIMD
-        {
-            auto simd = bench_tiled("std-simd", N, best_bs,
+        for (size_t bs : block_sizes) {
+            auto simd = bench_tiled("std-simd", N, bs,
                                      tile_runtime::gemm_simd, warmup, trials);
             print_row(simd, naive.time_ms);
             record(simd);
         }
 #endif
 
-        // --- Parallel + SIMD (AVX2) ---
+        // --- Parallel + SIMD (AVX2, sweep block sizes) ---
         if (cpu.avx2 && cpu.fma) {
-            for (int t : threads) {
-                auto par_simd = bench_parallel("parallel+simd", N, best_bs,
-                                                tile_runtime::gemm_parallel_simd,
-                                                warmup, trials, t);
-                print_row(par_simd, naive.time_ms);
-                record(par_simd);
+            for (size_t bs : block_sizes) {
+                for (int t : threads) {
+                    auto par_simd = bench_parallel("parallel+simd", N, bs,
+                                                    tile_runtime::gemm_parallel_simd,
+                                                    warmup, trials, t);
+                    print_row(par_simd, naive.time_ms);
+                    record(par_simd);
+                }
             }
         }
 
-        // --- Parallel + AVX-512 ---
+        // --- Parallel + AVX-512 (sweep block sizes) ---
         if (cpu.avx512f) {
-            for (int t : threads) {
-                auto par_avx512 = bench_parallel("parallel+avx512", N, best_bs,
-                                                  tile_runtime::gemm_parallel_avx512,
-                                                  warmup, trials, t);
-                print_row(par_avx512, naive.time_ms);
-                record(par_avx512);
+            for (size_t bs : block_sizes) {
+                for (int t : threads) {
+                    auto par_avx512 = bench_parallel("parallel+avx512", N, bs,
+                                                      tile_runtime::gemm_parallel_avx512,
+                                                      warmup, trials, t);
+                    print_row(par_avx512, naive.time_ms);
+                    record(par_avx512);
+                }
             }
         }
 
