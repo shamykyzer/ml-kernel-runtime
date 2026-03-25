@@ -22,10 +22,12 @@ I built this project inspired by how ML accelerator runtimes (Graphcore Poplibs,
 
 | Component | Detail |
 |-----------|--------|
-| **CPU** | AMD Ryzen AI 9 365 w/ Radeon 880M (10C/20T, AVX-512) |
-| **OS** | WSL2 (Linux 6.6) on Windows |
-| **Compiler** | GCC with `-O3 -march=native` |
+| **CPU** | AMD Ryzen AI 9 365 w/ Radeon 880M (Zen 5, 10C/20T, 48KB L1d/core, 1MB L2/core, 16MB L3) |
+| **ISA** | AVX2, FMA, AVX-512F, AVX-512VL, AVX-512BW, AVX-512DQ, AVX-512VNNI |
+| **OS** | WSL2 (Linux 6.6.87) on Windows |
+| **Compiler** | GCC 13.3.0 with `-O3 -march=native -fopenmp` |
 | **Build** | CMake 3.14+, Make |
+| **Trials** | 5 timed trials per configuration (mean reported, std dev in CSV) |
 
 [![View Interactive Chart](https://img.shields.io/badge/Interactive_Chart-8B5CF6?style=flat-square&logo=chartdotjs&logoColor=white)](https://shamykyzer.github.io/ml-kernel-runtime/gemm_performance_comparison.html)
 
@@ -100,11 +102,11 @@ make clean    # remove build directory
 | `gemm_naive` | Triple loop, one cell at a time | None | 1 | 1x (baseline) |
 | `gemm_tiled` | Block loop, configurable tile size | None | 1 | ~8x |
 | `gemm_parallel` | Block loop, tiles split across cores | None | All | ~48x |
-| `gemm_avx` | Tiled + AVX2 4x8 micro-kernel + FMA + prefetch | AVX2 (8-wide) | 1 | Run `make bench` |
-| `gemm_avx512` | Tiled + AVX-512 4x16 micro-kernel + masked edges | AVX-512 (16-wide) | 1 | Run `make bench` |
-| `gemm_simd` | Tiled + std::experimental::simd (portable) | native_simd | 1 | Run `make bench` |
-| `gemm_parallel_simd` | OpenMP parallel tiles + AVX2 inner loop | AVX2 (8-wide) | All | Run `make bench` |
-| `gemm_parallel_avx512` | OpenMP parallel tiles + AVX-512 inner loop + masked edges | AVX-512 (16-wide) | All | Run `make bench` |
+| `gemm_avx` | Tiled + AVX2 4x8 micro-kernel + FMA + prefetch | AVX2 (8-wide) | 1 | ~110x |
+| `gemm_avx512` | Tiled + AVX-512 4x16 micro-kernel + masked edges | AVX-512 (16-wide) | 1 | ~201x |
+| `gemm_simd` | Tiled + std::experimental::simd (portable) | native_simd | 1 | ~67x |
+| `gemm_parallel_simd` | OpenMP parallel tiles + AVX2 inner loop | AVX2 (8-wide) | 18 | ~638x |
+| `gemm_parallel_avx512` | OpenMP parallel tiles + AVX-512 inner loop + masked edges | AVX-512 (16-wide) | 18 | ~1100x |
 
 ### SIMD Micro-Kernel Register Tiling
 
@@ -118,7 +120,11 @@ I distribute output tiles across CPU cores via OpenMP. Each thread owns distinct
 
 At small matrix sizes (N=128), I found that thread overhead dominates and adding more threads actually hurts. At large N (1024+), my parallel+AVX-512 kernel peaks at **416 GFLOPS with 18 threads** — not 20, despite having 20 hardware threads (10 cores x 2 SMT).
 
-**Why I found 18 threads to be the sweet spot:** Each physical core on my Ryzen AI 9 365 has two SMT (hyperthreading) threads that share the same execution units, L1/L2 cache, and AVX-512 ports. At 18 threads, 8 cores run two threads each while 2 cores run one thread, leaving headroom for the OS scheduler and avoiding full SMT contention. At 20 threads, every core is fully saturated — both SMT threads compete for the same 512-bit FMA units and L1 cache lines holding the active tile, causing pipeline stalls and cache thrashing that drops throughput to 256 GFLOPS. I chose bs=64 (64x64 floats = 16KB per tile) because it fits cleanly in each core's 32KB L1d cache, but when two SMT threads on the same core both load their own 16KB tiles, L1 pressure doubles and evictions spike. At 18 threads the reduced contention keeps tiles resident in L1 through my full micro-kernel computation.
+**Why 18 threads outperforms 20 — a hypothesis:** My CPU has 10 physical cores with 2 SMT threads each (20 logical threads). Each physical core shares a single set of AVX-512 execution units and a 48KB L1d cache between its two SMT threads. I hypothesize that the performance drop at 20 threads (256 GFLOPS vs 416 at 18) is caused by full SMT saturation: at 18 threads, 2 cores run only 1 thread each, leaving scheduling headroom and reducing contention for shared resources. At 20 threads, both SMT threads on every core compete for the same 512-bit FMA units and L1 cache lines.
+
+The cache pressure argument: with bs=64, each thread's working set per tile iteration includes portions of A, B, and C tiles. A full 64x64 tile is 16KB, and the micro-kernel accesses tiles from all three matrices. While a single thread's hot data fits comfortably in 48KB L1d, two SMT threads sharing the same L1d each bring in their own tile data, increasing effective L1d pressure and potentially causing evictions during the inner loop.
+
+**Caveat:** I have not verified this hypothesis with hardware performance counters (`perf stat`). The drop at 20 threads could alternatively be caused by OS scheduler interference under WSL2, DVFS frequency throttling under higher all-core power draw, or OpenMP load imbalance when distributing tiles across a non-power-of-2 thread count. Confirming the root cause would require measuring L1 miss rates, pipeline stalls, and per-core frequency directly — I consider this future work.
 
 ![Thread Scaling Chart](docs/thread_scaling_chart.svg)
 
@@ -126,8 +132,7 @@ At small matrix sizes (N=128), I found that thread overhead dominates and adding
 
 ## How It Works
 
-<details>
-<summary><strong>The Tensor: Row-Major Data Layout</strong></summary>
+### The Tensor: Row-Major Data Layout
 
 I store my `Tensor` as a 2D grid in a flat array using row-major order:
 
@@ -135,10 +140,7 @@ I store my `Tensor` as a 2D grid in a flat array using row-major order:
 
 Element at row `i`, col `j`: `index = i * cols + j`. This layout means traversing a row is sequential in memory (cache-friendly), but traversing a column jumps by `cols` each step.
 
-</details>
-
-<details>
-<summary><strong>GEMM: General Matrix Multiply</strong></summary>
+### GEMM: General Matrix Multiply
 
 GEMM computes `C = A x B`. For each output cell, I take a row from A and a column from B, multiply pair-by-pair, and sum:
 
@@ -154,10 +156,7 @@ C[0][0] = (1*7) + (2*9) + (3*11) = 58
 
 Every neural network layer is dominated by matrix multiplications. Optimizing GEMM is the single biggest lever for ML performance.
 
-</details>
-
-<details>
-<summary><strong>Why Naive GEMM Is Slow</strong></summary>
+### Why Naive GEMM Is Slow
 
 CPUs have a memory hierarchy: fast-but-tiny cache, slow-but-large RAM.
 
@@ -165,10 +164,7 @@ CPUs have a memory hierarchy: fast-but-tiny cache, slow-but-large RAM.
 
 My naive GEMM reads columns of B, which jump through memory by stride, thrashing the cache. For 1024x1024 matrices, B is ~4MB and can't stay in cache, so the CPU keeps loading and evicting the same data.
 
-</details>
-
-<details>
-<summary><strong>Tiled GEMM: The Fix</strong></summary>
+### Tiled GEMM: The Fix
 
 Instead of computing one cell at a time across the whole matrix, I process small **blocks** that fit in cache:
 
@@ -176,10 +172,7 @@ Instead of computing one cell at a time across the whole matrix, I process small
 
 A 16x16 tile = 1KB, which fits easily in L1 cache. Same math, same result, just a smarter traversal order.
 
-</details>
-
-<details>
-<summary><strong>AVX-512: Wider Registers, Masked Edges</strong></summary>
+### AVX-512: Wider Registers, Masked Edges
 
 AVX-512 doubles the register width to 512 bits (16 floats per ZMM register), giving me a 4x16 micro-kernel that processes 128 FLOPs per k-step, delivering 2x the throughput of AVX2.
 
@@ -193,10 +186,7 @@ Masked (N%16=5): [b₀ b₁ b₂ b₃ b₄  0  0  0  0  0   0   0   0   0   0   
 
 I use runtime CPUID guards (`cpu_features.h`) to check for AVX-512F and AVX-512VL before dispatching to this kernel.
 
-</details>
-
-<details>
-<summary><strong>std::experimental::simd: Portable SIMD</strong></summary>
+### std::experimental::simd: Portable SIMD
 
 My hand-written intrinsics (`_mm256_fmadd_ps`, `_mm512_fmadd_ps`) are fast but tied to specific ISAs. I also implemented a kernel using `std::experimental::simd` (ISO/IEC TS 19570), which provides a portable abstraction that maps to the best available SIMD on the target:
 
@@ -217,10 +207,7 @@ c_vec.copy_to(&c[i * N + j], stdx::element_aligned);
 
 Trade-off: I found it gives roughly the same performance as my hand-tuned AVX2 on GCC with `-O3`, but with no register tiling (1-row kernel vs 4-row micro-kernel), no prefetching, and no masked edge handling. The gap widens at non-aligned dimensions.
 
-</details>
-
-<details>
-<summary><strong>Parallel + SIMD: Combining Both</strong></summary>
+### Parallel + SIMD: Combining Both
 
 In `gemm_parallel_simd` I combine OpenMP tile distribution with AVX2 4x8 micro-kernels inside each tile. Each thread gets its own tile region (no synchronization), and within each tile the inner loops use my FMA intrinsics with prefetching.
 
@@ -231,10 +218,7 @@ Thread 2: tile(2,0) → AVX2 4x8 micro-kernel inside
 ...
 ```
 
-</details>
-
-<details>
-<summary><strong>Parallel + AVX-512: Maximum Throughput</strong></summary>
+### Parallel + AVX-512: Maximum Throughput
 
 `gemm_parallel_avx512` is my fastest kernel. I combine OpenMP tile distribution with AVX-512 4x16 micro-kernels and masked edge handling inside each tile. Each thread gets its own tile region (no synchronization), and within each tile the inner loops use 512-bit ZMM registers processing 16 floats per instruction.
 
@@ -247,18 +231,44 @@ Thread 2: tile(2,0) → AVX-512 4x16 micro-kernel + masked edges
 
 This exploits both instruction-level parallelism (16-wide SIMD) and thread-level parallelism (OpenMP) simultaneously. The 2x wider registers over AVX2 combined with masked operations for edge cases delivers ~2x throughput per thread, scaling to 416 GFLOPS at 18 threads — a 1100x speedup over my naive baseline.
 
-</details>
-
-<details>
-<summary><strong>Benchmark Methodology</strong></summary>
+### Benchmark Methodology
 
 ![Benchmark Pipeline](docs/benchmark_pipeline.svg)
 
-I use deterministic seeding to ensure reproducible inputs. Warmup stabilizes CPU frequency scaling. Higher GFLOPS = faster kernel.
+I compute throughput as **GFLOPS = 2N³ / t / 10⁹**, where N is the matrix dimension and t is wall-clock time in seconds. The factor of 2 counts both the multiply and add in each inner-product accumulation — this is the standard convention for GEMM floating-point operation counts (Goto & van de Geijn, 2008).
 
-</details>
+Each configuration runs **2 warmup iterations** (discarded) to stabilize CPU boost clocks and populate instruction/data caches, followed by **5 timed trials**. I report the arithmetic mean of the 5 trials. Per-trial standard deviations are recorded in [`benchmark_results.csv`](benchmark_results.csv) for statistical transparency. I time each trial with `std::chrono::high_resolution_clock`, and the measured region includes the `C.zero()` output-matrix initialization.
+
+Inputs are deterministically seeded (`A.randomize(42)`, `B.randomize(84)`) so that results are bitwise reproducible across runs on the same hardware and compiler. Correctness is validated separately in `test_gemm.cpp` against a reference naive implementation with a tolerance of 1e-4.
+
+**Sources of variance I have not controlled for:** I did not pin the CPU frequency governor, did not use `taskset` for CPU affinity, and did not isolate cores from OS scheduling. These benchmarks run under WSL2, which adds a Hyper-V hypervisor layer that introduces scheduling jitter compared to bare-metal Linux. I observed run-to-run variance of 10–20% for parallel kernels across separate benchmark invocations.
+
+### Theoretical Peak & Efficiency
+
+My Ryzen AI 9 365 (Zen 5) has 10 cores, each with two 256-bit FMA units that fuse into a single 512-bit FMA unit. This gives each core **32 single-precision FLOPS/cycle** (16 floats × 2 ops per FMA). The theoretical peak is `10 cores × 32 FLOPS/cycle × f GHz` — but the sustained all-core frequency under AVX-512 load varies with thermal state, power limits, and boost algorithm. I did not measure this directly (WSL2 does not expose per-core frequency counters reliably).
+
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Theoretical single-core peak | ~128–160 GFLOPS | At 4.0–5.0 GHz (boost varies) |
+| Measured single-core AVX-512 | 75.98 GFLOPS | 48–59% of theoretical |
+| Theoretical 10-core peak | ~960–1,600 GFLOPS | At 3.0–5.0 GHz (unknown sustained) |
+| Measured 18-thread peak | 415.56 GFLOPS | 26–43% of theoretical |
+
+The gap between measured and theoretical throughput is expected for a kernel without multi-level cache blocking. At N=1024, the working set (3 matrices × 4MB = 12MB) exceeds the total L2 capacity (10MB), making memory bandwidth a limiting factor. Production BLAS libraries (OpenBLAS, MKL, BLIS) close this gap through techniques I have not implemented: L1/L2/L3-aware tiling hierarchies, B-panel packing for contiguous access, and prefetch scheduling tuned to specific microarchitectures.
 
 ---
+
+## Limitations
+
+I designed this project as an educational exploration of GEMM optimization techniques, not as a production-grade linear algebra library. I want to be explicit about what it does not do:
+
+- **Single precision only.** All kernels operate on `float` (32-bit). I have not implemented double-precision, half-precision, or integer quantized (INT8/BF16) variants.
+- **No comparison to production BLAS.** I have not benchmarked against OpenBLAS, Intel MKL, or BLIS. My 416 GFLOPS is measured against my own naive baseline; production libraries on this hardware would likely achieve significantly higher throughput through multi-level cache blocking, panel packing, and microarchitecture-specific tuning.
+- **Square matrices only in benchmarks.** My kernels handle arbitrary M×K×N dimensions (validated in `test_gemm.cpp`), but I only benchmark square N×N matrices. Real workloads involve rectangular shapes where tiling efficiency and edge-handling costs differ.
+- **WSL2, not bare-metal.** All benchmarks run under Windows Subsystem for Linux 2, which adds a Hyper-V hypervisor layer. I have not measured the WSL2 performance penalty relative to native Linux.
+- **No NUMA awareness.** I use OpenMP's default thread placement without explicit NUMA-aware memory allocation or thread pinning (`taskset` / `numactl`).
+- **No roofline analysis.** I have not measured memory bandwidth or constructed a roofline model to determine whether each kernel is compute-bound or memory-bound at each matrix size. The theoretical peak comparison above assumes compute-bound operation.
+- **Limited statistical rigor.** I report the mean of 5 trials per configuration with standard deviations available in the CSV. I do not report confidence intervals, and I have not performed statistical significance testing between configurations whose performance is close.
 
 ## Roadmap
 

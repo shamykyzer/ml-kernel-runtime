@@ -3,6 +3,7 @@
 #include "timer.h"
 #include "cpu_features.h"
 
+#include <cmath>
 #include <cstddef>
 #include <fstream>
 #include <iomanip>
@@ -23,6 +24,7 @@ struct BenchResult {
     size_t block_size;
     int threads;
     double time_ms;
+    double std_ms;
     double gflops;
     double speedup;
 };
@@ -50,6 +52,15 @@ static void set_num_threads(int t) {
 #endif
 }
 
+static void compute_stats(const std::vector<double>& times, double& mean, double& std_dev) {
+    mean = 0.0;
+    for (double t : times) mean += t;
+    mean /= times.size();
+    double var = 0.0;
+    for (double t : times) var += (t - mean) * (t - mean);
+    std_dev = (times.size() > 1) ? std::sqrt(var / (times.size() - 1)) : 0.0;
+}
+
 static BenchResult bench_kernel(const std::string& label, size_t N,
                                 KernelFn fn, int warmup, int trials) {
     Tensor A(N, N), B(N, N), C(N, N);
@@ -62,18 +73,19 @@ static BenchResult bench_kernel(const std::string& label, size_t N,
     }
 
     Timer timer;
-    double total_ms = 0.0;
+    std::vector<double> trial_ms(trials);
     for (int t = 0; t < trials; ++t) {
         C.zero();
         timer.start();
         fn(A, B, C);
         timer.stop();
-        total_ms += timer.elapsed_ms();
+        trial_ms[t] = timer.elapsed_ms();
     }
 
-    double avg_ms = total_ms / trials;
+    double avg_ms, std_ms;
+    compute_stats(trial_ms, avg_ms, std_ms);
     double avg_sec = avg_ms / 1000.0;
-    return {label, N, 0, 1, avg_ms, compute_gflops(N, avg_sec), 0.0};
+    return {label, N, 0, 1, avg_ms, std_ms, compute_gflops(N, avg_sec), 0.0};
 }
 
 static BenchResult bench_tiled(const std::string& label, size_t N,
@@ -89,18 +101,19 @@ static BenchResult bench_tiled(const std::string& label, size_t N,
     }
 
     Timer timer;
-    double total_ms = 0.0;
+    std::vector<double> trial_ms(trials);
     for (int t = 0; t < trials; ++t) {
         C.zero();
         timer.start();
         fn(A, B, C, block_size);
         timer.stop();
-        total_ms += timer.elapsed_ms();
+        trial_ms[t] = timer.elapsed_ms();
     }
 
-    double avg_ms = total_ms / trials;
+    double avg_ms, std_ms;
+    compute_stats(trial_ms, avg_ms, std_ms);
     double avg_sec = avg_ms / 1000.0;
-    return {label, N, block_size, 1, avg_ms, compute_gflops(N, avg_sec), 0.0};
+    return {label, N, block_size, 1, avg_ms, std_ms, compute_gflops(N, avg_sec), 0.0};
 }
 
 static BenchResult bench_parallel(const std::string& label, size_t N,
@@ -119,18 +132,19 @@ static BenchResult bench_parallel(const std::string& label, size_t N,
     }
 
     Timer timer;
-    double total_ms = 0.0;
+    std::vector<double> trial_ms(trials);
     for (int t = 0; t < trials; ++t) {
         C.zero();
         timer.start();
         fn(A, B, C, block_size);
         timer.stop();
-        total_ms += timer.elapsed_ms();
+        trial_ms[t] = timer.elapsed_ms();
     }
 
-    double avg_ms = total_ms / trials;
+    double avg_ms, std_ms;
+    compute_stats(trial_ms, avg_ms, std_ms);
     double avg_sec = avg_ms / 1000.0;
-    return {label, N, block_size, actual_threads, avg_ms, compute_gflops(N, avg_sec), 0.0};
+    return {label, N, block_size, actual_threads, avg_ms, std_ms, compute_gflops(N, avg_sec), 0.0};
 }
 
 static void print_baseline(const BenchResult& r) {
@@ -305,7 +319,7 @@ int main() {
     // --- Write CSV ---
     std::ofstream csv("benchmark_results.csv");
     if (csv.is_open()) {
-        csv << "kernel,N,block_size,threads,time_ms,gflops,speedup\n";
+        csv << "kernel,N,block_size,threads,time_ms,std_ms,gflops,speedup\n";
         csv << std::fixed;
         for (const auto& r : all_results) {
             csv << r.label << ","
@@ -313,6 +327,7 @@ int main() {
                 << r.block_size << ","
                 << r.threads << ","
                 << std::setprecision(2) << r.time_ms << ","
+                << std::setprecision(2) << r.std_ms << ","
                 << std::setprecision(2) << r.gflops << ","
                 << std::setprecision(1) << r.speedup << "\n";
         }
